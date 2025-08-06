@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 use std::error::Error;
-use xmss_for_ethereum::{XmssWrapper, SignatureAggregator, BenchmarkMetrics, BenchmarkReport};
+use xmss_lib::{XmssWrapper, SignatureAggregator, BenchmarkMetrics, BenchmarkReport};
 use tracing::{info, error};
 use tracing_subscriber;
 

@@ -1,0 +1,10 @@
+[package]
+name = "xmss-guest"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+
+[dependencies]
+openvm = { git = "https://github.com/openvm-org/openvm.git", default-features = false }
+shared = { path = "../shared", default-features = false }

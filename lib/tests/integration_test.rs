@@ -1,4 +1,4 @@
-use xmss_for_ethereum::{XmssWrapper, SignatureAggregator};
+use xmss_lib::xmss::{XmssWrapper, SignatureAggregator};
 
 #[test]
 fn test_single_signature_verification() {

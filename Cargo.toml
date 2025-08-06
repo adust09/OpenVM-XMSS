@@ -1,34 +1,9 @@
-[package]
-name = "xmss-for-ethereum"
-version = "0.1.0"
-edition = "2021"
-authors = ["XMSS for Ethereum Team"]
-description = "XMSS signature aggregation benchmark with zkVM proof"
-license = "MIT"
+[workspace]
+members = ["host", "shared", "lib"]
+exclude = ["guest"]
+resolver = "2"
 
-# [workspace]
-# members = [".", "src/zkvm/guest", "src/zkvm/host"]
-
-[dependencies]
-# Time measurement
-chrono = { version = "0.4", features = ["serde"] }
-# Serialization
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-# Command line interface
-clap = { version = "4.0", features = ["derive"] }
-# Async runtime
-tokio = { version = "1.0", features = ["full"] }
-# Logging
-tracing = "0.1"
-tracing-subscriber = "0.3"
-
-# XMSS library from hypercube
-hypercube-signatures = { path = "libs/hypercube" }
-
-[dev-dependencies]
-criterion = { version = "0.5", features = ["html_reports"] }
-
-[[bench]]
-name = "xmss_benchmark"
-harness = false
+[workspace.dependencies]
+openvm = { git = "https://github.com/openvm-org/openvm.git", features = ["std"], default-features = false }
+serde = { version = "1.0", features = ["derive"], default-features = false }
+hypercube-signatures = { git = "https://github.com/adust09/hypercube" }
