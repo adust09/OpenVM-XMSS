@@ -1,13 +1,13 @@
 # XMSS for Ethereum
 
-XMSS (eXtended Merkle Signature Scheme) verification tailored for Ethereum, with an OpenVM guest program that proves batch verification using the TSL encoding scheme and accelerated SHA‑256.
+XMSS (eXtended Merkle Signature Scheme) verification tailored for Ethereum, with an OpenVM guest program that proves batch verification using the TSL encoding scheme and accelerated SHA‑256, and binds a public statement (k, ep, m, pk_i) via a commitment revealed as public output.
 
 ## Overview
 
 This repository focuses on verifiable XMSS verification inside OpenVM:
 - Verify multiple XMSS signatures in a guest program
 - Generate application-level proofs (`cargo openvm prove app`)
-- Reveal pass/fail and counts as public values
+- Reveal pass/fail, count, and statement commitment as public values
 
 ### In Progress 🚧
 - Guest TSL mapper and XMSS verification wiring
@@ -22,7 +22,7 @@ xmss-for-ethereum/
 │   ├── src/main.rs        # Entry; reads batch input and reveals results
 │   └── openvm.toml        # VM config (sha256 enabled)
 ├── shared/                # Shared, no_std types (input/output structs)
-│   └── src/lib.rs         # CompactSignature/PublicKey/VerificationInput
+│   └── src/lib.rs         # CompactSignature/PublicKey/Statement/Witness
 ├── host/                  # Host CLI (integration hooks)
 │   └── src/main.rs        # Prove/verify scaffolding (WIP)
 └── lib/                   # XMSS helpers (CPU), no benchmarks/CLI
@@ -70,7 +70,7 @@ Generate a minimal, valid single-XMSS input and run it:
 # From repo root
 cargo run -p xmss-host -- single-gen --output guest/input.json
 cd guest
-cargo openvm run --input input.json   # reveals: all_valid=1, num_verified=1
+cargo openvm run --input input.json   # reveals: all_valid=1, num_verified=1, stmt_commit[8 words]
 # Optional: app proof
 cargo openvm prove app --input input.json
 cargo openvm verify app
@@ -99,12 +99,12 @@ Note: This expects `cargo-openvm` to be installed and keys generated (`cd guest 
 
 Inputs use OpenVM’s byte format (little‑endian, 4‑byte padding). The guest reads a single `VerificationBatch` containing:
 - `params`: TSL/XMSS parameters (`w`, `v`, `d0`, `security_bits`, `tree_height`)
-- `input`: `VerificationInput` with arrays of `CompactSignature`, messages, and public keys
+- `statement`: `Statement { k, ep, m, public_keys }`
+  - `k`: number of signatures expected
+  - `ep`: epoch (u64) mixed into the domain for TSL step derivation
+  - `m`: single common message for all signatures
+  - `public_keys`: array of `CompactPublicKey { root, seed }`
+- `witness`: `Witness { signatures }` where each is `CompactSignature`
 
 Place serialized bytes in `guest/input.json` as `{ "input": ["0x01<hex>"] }`.
-
-## Notes
-
-- The guest enables SHA‑256 acceleration via `guest/openvm.toml` `[app_vm_config.sha256]` and uses `openvm-sha2` in code.
-- The verifier enforces `wots_signature.len() == v` and `auth_path.len() == tree_height`.
-- CPU benchmarks and lib‑level CLI have been removed to focus on the proof path.
+The guest reveals: `all_valid`, `num_verified`, and `stmt_commit` (8 little-endian u32 words).

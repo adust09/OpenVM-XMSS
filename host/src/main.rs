@@ -83,7 +83,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let guest_proof = Path::new("guest").join("xmss-guest.app.proof");
             if let Some(parent) = guest_proof.parent() { std::fs::create_dir_all(parent)?; }
             std::fs::copy(&proof_abs, &guest_proof)?;
-            run_in_guest(["openvm", "verify", "app"])?:
+            run_in_guest(["openvm", "verify", "app"])?
             println!("Proof verified successfully");
         }
         Commands::SingleGen { output } => {
@@ -91,7 +91,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             // verification is trivially satisfiable for any chosen 32-byte element.
             // Choice: w=2, v=1, d0=1 -> steps = [1]; t=(w-1-1)=0 so no chain hashing.
             // tree_height=0 -> root = leaf = H(sig_elem).
-            use shared::{CompactPublicKey, CompactSignature, VerificationBatch, VerificationInput, TslParams};
+            use shared::{CompactPublicKey, CompactSignature, VerificationBatch, TslParams, Statement, Witness};
 
             // Pick a deterministic signature element and compute its leaf/root = sha256(elem)
             let sig_elem = [0x11u8; 32];
@@ -113,12 +113,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let pk = CompactPublicKey { root, seed: [0u8; 32] };
 
             let params = TslParams { w: 2, v: 1, d0: 1, security_bits: 128, tree_height: 0 };
-            let input = VerificationInput {
-                signatures: vec![sig],
-                messages: vec![b"single".to_vec()],
+            let statement = Statement {
+                k: 1,
+                ep: 0,
+                m: b"single".to_vec(),
                 public_keys: vec![pk],
             };
-            let batch = VerificationBatch { params, input };
+            let witness = Witness {
+                signatures: vec![sig],
+            };
+            let batch = VerificationBatch { params, statement, witness };
 
             // Serialize with OpenVM serde (LE u32 words) and wrap into JSON
             let words: Vec<u32> = openvm::serde::to_vec(&batch).expect("serialize batch");
@@ -133,6 +137,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             std::fs::write(&output, serde_json::to_string_pretty(&json)?)?;
             println!("Wrote single-signature input to {}", output);
             println!("Next: cd guest && cargo openvm run --input {}", output);
+            println!("Guest will reveal: all_valid, count, stmt_commit (8 words)");
         }
         Commands::Benchmark { signatures } => {
             println!("Benchmarking with {} signatures", signatures);

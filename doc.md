@@ -7,17 +7,18 @@
 
 ## 構成・主要ファイル
 - `guest/`
-  - `src/main.rs`: OpenVM エントリ。`VerificationBatch` を読み、`xmss_verify::verify_batch` の結果を `reveal_u32` で公開。
+  - `src/main.rs`: OpenVM エントリ。`VerificationBatch` を読み、`xmss_verify::verify_batch` の結果（合否・件数）とステートメントコミットメントを `reveal_u32` で公開。
   - `src/hash.rs`: `openvm_sha2::{sha256, set_sha256}` ラッパ。`hash_message_randomness` など。
-  - `src/tsl.rs`: TSL マッピング（H(m)→LE u64→層 d0 のベクトルへの対応、DP による unranking）。
-  - `src/xmss_verify.rs`: WOTS チェーンの前進ハッシュ、公開鍵ハッシュ、Merkle ルート算出と比較、バッチ検証。
+  - `src/tsl.rs`: TSL マッピング（H(ep||m)→LE u64→層 d0 のベクトルへの対応、DP による unranking）。
+  - `src/xmss_verify.rs`: WOTS チェーンの前進ハッシュ、公開鍵ハッシュ、Merkle ルート算出と比較、バッチ検証、`statement_commitment` 計算。
   - `openvm.toml`: `[app_vm_config.sha256]` を有効化。
 - `shared/src/lib.rs`: 共有型（no_std）。
   - `CompactSignature { leaf_index, randomness, wots_signature, auth_path }`
   - `CompactPublicKey { root, seed }`
-  - `VerificationInput { signatures, messages, public_keys }`
+  - `Statement { k, ep, m, public_keys }`
+  - `Witness { signatures }`
   - `TslParams { w, v, d0, security_bits, tree_height }`
-  - `VerificationBatch { params, input }`
+  - `VerificationBatch { params, statement, witness }`
 - `host/src/bin/`
   - `gen_input.rs`: 空バッチの入力 JSON を生成。
   - `gen_fail.rs`: 失敗ケース用の 1 件バッチを生成。
@@ -31,18 +32,22 @@
     - `d0`: TSL レイヤ（0..=v*(w-1)）
     - `security_bits`: 参考用（128/160 など）
     - `tree_height`: Merkle 高さ（`auth_path.len()` と一致）
-  - `input`: `VerificationInput`
-    - `signatures[i]`: `CompactSignature`
-    - `messages[i]`: 任意バイト列
-    - `public_keys[i]`: `CompactPublicKey`
+  - `statement`: `Statement`
+    - `k`: 署名者数
+    - `ep`: エポック（u64）
+    - `m`: 単一メッセージ（全署名に共通）
+    - `public_keys`: `CompactPublicKey` の配列
+  - `witness`: `Witness`
+    - `signatures`: `CompactSignature` の配列
 - シリアライズ: `openvm::serde::to_vec`（u32 ワード列）。JSON 入力は `{"input":["0x01<LE バイト列 hex>"]}`。
-- 公開出力（user public values）: u32 little-endian 2 個
+- 公開出力（user public values）: u32 little-endian
   - `index 0`: `all_valid`（1: すべて妥当、0: いずれか失敗）
   - `index 1`: `num_verified`（検証した件数）
+  - `index 2..9`: `stmt_commit`（`H(k||ep||len(m)||m||len(pks)||pk[..])` の 256bit、LE u32×8）
 
 ## アルゴリズム仕様
 1) TSL ステップ導出（`tsl.rs`）
-   - メッセージダイジェスト: `sha256(message)` を使用。ランダムネスはゼロ固定（`[0u8;32]`）。
+   - ドメイン: `ep||m` をバイト列として連結。
    - インデックス: ハッシュ先頭 8 バイトを little-endian `u64` として解釈。
    - マッピング Ψ: `integer_to_vertex(index % ℓ_d, w, v, d0)` で、各成分が `[0, w-1]`、総和が `d0` の長さ `v` ベクトルを lexicographic に unrank。
    - 実装: DP により `ℓ_d` を計数（u128）。大規模パラメータで飽和の可能性あり（既知の制限）。
@@ -78,11 +83,10 @@
 - 統合テスト（ランモード補助）
   - `gen_input`: 空バッチ → `valid=1, count=0`
   - `gen_fail`: 偽署名 1 件 → `valid=0, count=1`
-  - `run_check`: 実行結果をパースし、期待値を検証。
+  - `run_check`: 実行結果をパースし、期待値と `stmt_commit` の一致を検証。
 
 ## 既知の制限 / 今後の課題
 - TSL の DP 実装は大規模パラメータで計数が u128 を超える可能性（フォールバック（ハッシュベース）未実装）。
 - WOTS 公開鍵の圧縮は `H(concat)` を採用。L-tree を用いる実装と互換が必要な場合は差し替えが必要。
 - 署名生成（サイナー）は本リポジトリに含めていないため、真に妥当なベクトルを用いた正の統合テストは外部生成に依存。
 - EVM 証明は重いセットアップ（`cargo openvm setup`）が必要。現状はアプリレベル証明での検証を想定。
-

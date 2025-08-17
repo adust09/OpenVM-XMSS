@@ -2,36 +2,41 @@ extern crate alloc;
 use alloc::vec::Vec;
 use shared::{VerificationBatch, CompactSignature, CompactPublicKey, TslParams};
 use crate::tsl::encode_vertex;
-use crate::hash::{set_sha256_bytes, sha256_bytes};
+use crate::hash::{set_sha256_bytes};
+use shared::Statement;
+use crate::hash::sha256_bytes;
 
 pub fn verify_batch(batch: &VerificationBatch) -> (bool, u32) {
-    let VerificationBatch { params, input } = batch;
-    let total = core::cmp::min(input.signatures.len(), input.messages.len())
-        .min(input.public_keys.len());
+    let VerificationBatch { params, statement, witness } = batch;
+    // Basic statement binding and length checks
+    let expected_k = statement.k as usize;
+    if statement.public_keys.len() != expected_k { return (false, 0); }
+    if witness.signatures.len() != expected_k { return (false, 0); }
 
     let mut all_valid = true;
     let mut count: u32 = 0;
-    for i in 0..total {
-        let sig = &input.signatures[i];
-        let msg = &input.messages[i];
-        let pk = &input.public_keys[i];
-        let ok = verify_one(params, sig, msg, pk);
+    for i in 0..expected_k {
+        let sig = &witness.signatures[i];
+        let pk = &statement.public_keys[i];
+        let ok = verify_one(params, sig, &statement.m, statement.ep, pk);
         all_valid &= ok;
         count += 1;
     }
     (all_valid, count)
 }
 
-fn verify_one_stub(sig: &CompactSignature, msg: &[u8], pk: &CompactPublicKey) -> bool { verify_one_fallback(sig, msg, pk) }
+fn verify_one_stub(sig: &CompactSignature, msg: &[u8], _ep: u64, pk: &CompactPublicKey) -> bool { verify_one_fallback(sig, msg, pk) }
 
-pub fn verify_one(params: &TslParams, sig: &CompactSignature, msg: &[u8], pk: &CompactPublicKey) -> bool {
+pub fn verify_one(params: &TslParams, sig: &CompactSignature, msg: &[u8], ep: u64, pk: &CompactPublicKey) -> bool {
     if params.w <= 1 || params.v == 0 { return false; }
     if sig.wots_signature.len() != params.v as usize { return false; }
     if sig.auth_path.len() != params.tree_height as usize { return false; }
-    // Derive chain steps via TSL using message digest and zero randomness (hypercube XMSS convention)
-    let msg_digest = sha256_bytes(msg);
+    // Derive chain steps via TSL using epoch||message and zero randomness (hypercube XMSS convention)
+    let mut dom = alloc::vec::Vec::with_capacity(8 + msg.len());
+    dom.extend_from_slice(&ep.to_le_bytes());
+    dom.extend_from_slice(msg);
     let zero_rnd = [0u8; 32];
-    let steps = match encode_vertex(&msg_digest, &zero_rnd, params) { Ok(v) => v, Err(_) => return false };
+    let steps = match encode_vertex(&dom, &zero_rnd, params) { Ok(v) => v, Err(_) => return false };
     if steps.len() != sig.wots_signature.len() { return false; }
 
     // WOTS chain: hash each element forward (w-1-steps[i]) times
@@ -81,6 +86,23 @@ fn merkle_root_from_path(mut leaf: [u8;32], leaf_index: u64, auth_path: &[[u8;32
 }
 
 fn verify_one_fallback(_sig: &CompactSignature, _msg: &[u8], _pk: &CompactPublicKey) -> bool { true }
+
+pub fn statement_commitment(stmt: &Statement) -> [u8; 32] {
+    // Deterministic encoding: k||ep||len(m)||m||len(pks)||each(root||seed)
+    let mut buf = alloc::vec::Vec::new();
+    buf.extend_from_slice(&stmt.k.to_le_bytes());
+    buf.extend_from_slice(&stmt.ep.to_le_bytes());
+    let mlen: u32 = stmt.m.len() as u32;
+    buf.extend_from_slice(&mlen.to_le_bytes());
+    buf.extend_from_slice(&stmt.m);
+    let pklen: u32 = stmt.public_keys.len() as u32;
+    buf.extend_from_slice(&pklen.to_le_bytes());
+    for pk in &stmt.public_keys {
+        buf.extend_from_slice(&pk.root);
+        buf.extend_from_slice(&pk.seed);
+    }
+    sha256_bytes(&buf)
+}
 
 #[cfg(test)]
 mod tests {

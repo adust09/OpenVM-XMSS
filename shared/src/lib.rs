@@ -21,11 +21,22 @@ pub struct CompactPublicKey {
     pub seed: [u8; 32],
 }
 
+// Statement/Witness separation to align with pqSNARK.md
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct VerificationInput {
-    pub signatures: Vec<CompactSignature>,
-    pub messages: Vec<Vec<u8>>,
+pub struct Statement {
+    // Number of signers/signatures expected
+    pub k: u32,
+    // Epoch (domain component)
+    pub ep: u64,
+    // Single common message for all signatures
+    pub m: Vec<u8>,
+    // Public keys corresponding to each signature
     pub public_keys: Vec<CompactPublicKey>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Witness {
+    pub signatures: Vec<CompactSignature>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -46,5 +57,6 @@ pub struct TslParams {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VerificationBatch {
     pub params: TslParams,
-    pub input: VerificationInput,
+    pub statement: Statement,
+    pub witness: Witness,
 }
