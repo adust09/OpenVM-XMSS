@@ -16,7 +16,7 @@ fn to_hex(bytes: &[u8]) -> String {
 
 fn main() {
     // Minimal empty batch: no signatures/messages/keys
-    let params = TslParams { w: 4, v: 4, d0: 4, security_bits: 128 };
+    let params = TslParams { w: 4, v: 4, d0: 4, security_bits: 128, tree_height: 0 };
     let input = VerificationInput { signatures: vec![], messages: vec![], public_keys: vec![] };
     let batch = VerificationBatch { params, input };
 

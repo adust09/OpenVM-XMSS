@@ -30,6 +30,7 @@
 - Integration tests in `lib/tests/*.rs`; per-module unit tests in `mod tests { ... }` blocks.
 - Test names: describe behavior (e.g., `verifies_single_signature`, `aggregates_n_signatures`).
 - Run with output: `cargo test -- --nocapture`. Aim to cover XMSS aggregation, serialization (shared), and zkVM glue.
+ - Validation: guest enforces `wots_signature.len() == v` and `auth_path.len() == tree_height`; set `TslParams.tree_height` in inputs.
 
 ## Commit & Pull Request Guidelines
 - Commits: imperative, concise subject (e.g., "Implement XMSS wrapper"), optional body for rationale.

@@ -14,7 +14,7 @@ OpenVM 内で XMSS 検証の正当性を証明する。ゲストは TSL で符�
   - `CompactPublicKey { root: [u8;32], seed: [u8;32] }`
   - `VerificationInput { signatures: Vec<CompactSignature>, messages: Vec<Vec<u8>>, public_keys: Vec<CompactPublicKey> }`
 - 追加:
-  - `TslParams { w: u16, v: u16, d0: u32, security_bits: u16 }`（no_std・Serialize/Deserialize）
+  - `TslParams { w: u16, v: u16, d0: u32, security_bits: u16, tree_height: u16 }`（no_std・Serialize/Deserialize）
   - `VerificationBatch { params: TslParams, input: VerificationInput }`
 
 ## OpenVM 設定と依存関係
@@ -54,6 +54,7 @@ OpenVM 内で XMSS 検証の正当性を証明する。ゲストは TSL で符�
 注意
 - 確保を抑え、バッファ再利用でメモリを節約。
 - ハッシュは全て `openvm-sha2`（`openvm_sha2::sha256`/`set_sha256`）を使用。ホスト乱数は使わない。
+- 署名長の検証: `wots_signature.len() == v`、`auth_path.len() == tree_height` を満たすことをチェック。
 
 ### 参考コード（ハッシュ結合）
 ```rust

@@ -16,7 +16,7 @@ fn to_hex(bytes: &[u8]) -> String {
 
 fn main() {
     // Small params, 1 fake signature guaranteed to fail
-    let params = TslParams { w: 4, v: 4, d0: 4, security_bits: 128 };
+    let params = TslParams { w: 4, v: 4, d0: 4, security_bits: 128, tree_height: 0 };
 
     let sig = CompactSignature {
         leaf_index: 0,
@@ -47,4 +47,3 @@ fn main() {
     fs::write(&out, json).expect("write input.json");
     println!("Wrote {}", out.display());
 }
-

@@ -904,6 +904,7 @@ dependencies = [
  "clap",
  "openvm",
  "serde_json",
+ "sha2",
  "shared",
  "tokio",
 ]

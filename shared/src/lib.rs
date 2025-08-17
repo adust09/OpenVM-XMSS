@@ -40,6 +40,7 @@ pub struct TslParams {
     pub v: u16,
     pub d0: u32,
     pub security_bits: u16,
+    pub tree_height: u16,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

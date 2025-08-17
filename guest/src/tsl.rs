@@ -115,7 +115,7 @@ mod tests {
 
     #[test]
     fn encode_vertex_deterministic() {
-        let params = TslParams { w: 4, v: 4, d0: 4, security_bits: 128 };
+        let params = TslParams { w: 4, v: 4, d0: 4, security_bits: 128, tree_height: 0 };
         let msg = b"hello";
         let rnd = [7u8; 32];
         let a = encode_vertex(msg, &rnd, &params).unwrap();
