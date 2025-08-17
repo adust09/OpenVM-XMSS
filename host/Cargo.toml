@@ -5,9 +5,7 @@ edition = "2021"
 
 [dependencies]
 openvm = { workspace = true }
-xmss-lib = { path = "../lib" }
 shared = { path = "../shared" }
-hypercube-signatures = { workspace = true }
 clap = { version = "4.0", features = ["derive"] }
 tokio = { version = "1.0", features = ["full"] }
 serde_json = "1.0"

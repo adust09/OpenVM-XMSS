@@ -1,109 +1,76 @@
 # XMSS for Ethereum
 
-A high-performance implementation of XMSS (eXtended Merkle Signature Scheme) signature aggregation for Ethereum, with zkVM proof generation support for quantum-resistant cryptography.
+XMSS (eXtended Merkle Signature Scheme) verification tailored for Ethereum, with an OpenVM guest program that proves batch verification using the TSL encoding scheme and accelerated SHA‑256.
 
 ## Overview
 
-This repository provides benchmarking and verification tools for XMSS aggregated signatures, designed to:
-- Aggregate and verify multiple XMSS signatures efficiently
-- Generate zkVM proofs for signature verification
-- Measure performance metrics including proof generation time and memory consumption
-- Support up to 10 aggregated signatures per batch
+This repository focuses on verifiable XMSS verification inside OpenVM:
+- Verify multiple XMSS signatures in a guest program
+- Generate application-level proofs (`cargo openvm prove app`)
+- Reveal pass/fail and counts as public values
 
 ### In Progress 🚧
-- OpenVM zkVM integration
-- On-chain verification contracts
-- Performance optimizations
-- Extended benchmarking scenarios
+- Guest TSL mapper and XMSS verification wiring
+- App‑level proof workflow and inputs tooling
+- Optional EVM proof path (post `cargo openvm setup`)
+
 ## Project Structure
 
 ```
 xmss-for-ethereum/
-├── lib/                    # Main library implementation
-│   ├── src/               
-│   │   ├── xmss/          # XMSS module
-│   │   │   ├── mod.rs     # Module exports
-│   │   │   ├── wrapper.rs # XMSS wrapper functionality
-│   │   │   └── aggregator.rs # Signature aggregation logic
-│   │   ├── zkvm/          # zkVM integration module
-│   │   ├── benchmark/     # Benchmarking utilities
-│   │   ├── lib.rs         # Library exports
-│   │   └── main.rs        # CLI application
-│   ├── tests/             # Integration tests
-│   └── benches/           # Criterion benchmarks
-├── host/                  # zkVM host implementation
-├── guest/                 # zkVM guest implementation
-└── shared/                # Shared types and utilities
+├── guest/                 # OpenVM guest (no_std)
+│   ├── src/main.rs        # Entry; reads batch input and reveals results
+│   └── openvm.toml        # VM config (sha256 enabled)
+├── shared/                # Shared, no_std types (input/output structs)
+│   └── src/lib.rs         # CompactSignature/PublicKey/VerificationInput
+├── host/                  # Host CLI (integration hooks)
+│   └── src/main.rs        # Prove/verify scaffolding (WIP)
+└── lib/                   # XMSS helpers (CPU), no benchmarks/CLI
+    └── src/xmss/          # Wrapper/aggregator (internal use)
 ```
 
-## Installation
+## Prerequisites
+
+Install the OpenVM CLI and toolchain (see OpenVM book):
 
 ```bash
-# Clone the repository
-git clone https://github.com/your-username/xmss-for-ethereum.git
-cd xmss-for-ethereum
-
-# Build the project
-cargo build --release
+cargo +1.85 install --locked --git https://github.com/openvm-org/openvm.git --tag v1.3.0 cargo-openvm
+rustup install nightly-2025-02-14
+rustup component add rust-src --toolchain nightly-2025-02-14
 ```
 
-## Usage
-
-### Library Usage
-
-```rust
-use xmss_lib::{XmssWrapper, SignatureAggregator};
-
-// Create wrapper with default parameters
-let wrapper = XmssWrapper::new()?;
-
-// Create aggregator
-let mut aggregator = SignatureAggregator::new(wrapper.params().clone());
-
-// Generate and aggregate signatures
-for i in 0..10 {
-    let keypair = wrapper.generate_keypair()?;
-    let message = format!("Message {}", i).into_bytes();
-    let signature = wrapper.sign(&keypair, &message)?;
-    let public_key = keypair.lock().unwrap().public_key().clone();
-    
-    aggregator.add_signature(signature, message, public_key)?;
-}
-
-// Verify all signatures
-let (is_valid, duration) = aggregator.verify_all()?;
-println!("Verified {} signatures in {:?}", aggregator.len(), duration);
-```
-
-### CLI Commands
+## Build, Prove, Verify
 
 ```bash
-# Run benchmarks with 10 signatures (from lib directory)
-cd lib && cargo run --release -- benchmark --signatures 10
+# Build the OpenVM guest
+cd guest
+cargo openvm build
 
-# Run benchmarks with custom parameters
-cd lib && cargo run --release -- benchmark \
-  --signatures 5 \
-  --tree-height 8 \
-  --security-bits 128 \
-  --output results.json
+# Generate app proving/verifying keys
+cargo openvm keygen
 
-# Generate test data for zkVM
-cd lib && cargo run --release -- generate --count 10 --output test_data.bin
+# Provide input (OpenVM bytes format) and generate an app-level proof
+# Example: guest/input.json with { "input": ["0x01<serialized VerificationBatch>"] }
+cargo openvm prove app --input guest/input.json
+
+# Verify the app-level proof
+cargo openvm verify app
+
+# Optional: generate/verify EVM proof after heavy setup
+# cargo openvm setup
+# cargo openvm prove evm --input guest/input.json
+# cargo openvm verify evm
 ```
 
-## Testing
+## Input Format
 
-```bash
-# Run all tests
-cargo test
+Inputs use OpenVM’s byte format (little‑endian, 4‑byte padding). The guest reads a single `VerificationBatch` containing:
+- `params`: TSL parameters (`w`, `v`, `d0`, `security_bits`)
+- `input`: `VerificationInput` with arrays of `CompactSignature`, messages, and public keys
 
-# Run with output
-cargo test -- --nocapture
+Place serialized bytes in `guest/input.json` as `{ "input": ["0x01<hex>"] }`.
 
-# Run specific test
-cargo test test_single_signature_verification
+## Notes
 
-# Run benchmarks
-cargo bench
-```
+- The guest enables SHA‑256 acceleration via `guest/openvm.toml` `[app_vm_config.sha256]` and uses `openvm-sha2` in code.
+- CPU benchmarks and lib‑level CLI have been removed to focus on the proof path.

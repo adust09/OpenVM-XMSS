@@ -7,29 +7,7 @@ description = "XMSS signature aggregation library"
 license = "MIT"
 
 [dependencies]
-# Time measurement
-chrono = { version = "0.4", features = ["serde"] }
-# Serialization
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-# Command line interface
-clap = { version = "4.0", features = ["derive"] }
-# Async runtime
-tokio = { version = "1.0", features = ["full"] }
-# Logging
-tracing = "0.1"
-tracing-subscriber = "0.3"
-
 # XMSS library from hypercube
 hypercube-signatures = { workspace = true }
 
 [dev-dependencies]
-criterion = { version = "0.5", features = ["html_reports"] }
-
-[[bin]]
-name = "xmss-lib"
-path = "src/main.rs"
-
-[[bench]]
-name = "xmss_benchmark"
-harness = false
