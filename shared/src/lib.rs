@@ -33,3 +33,17 @@ pub struct VerificationResult {
     pub all_signatures_valid: bool,
     pub num_signatures_verified: usize,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TslParams {
+    pub w: u16,
+    pub v: u16,
+    pub d0: u32,
+    pub security_bits: u16,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VerificationBatch {
+    pub params: TslParams,
+    pub input: VerificationInput,
+}
