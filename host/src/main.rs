@@ -156,8 +156,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
             // Choose the minimal tree height h such that 2^h >= signatures.
             // Clamp to at least h=2.
-            let needed_h = ((signatures.max(1) - 1).next_power_of_two().trailing_zeros() as usize)
-                .max(2);
+            let needed_h =
+                ((signatures.max(1) - 1).next_power_of_two().trailing_zeros() as usize).max(2);
             let wrapper = XmssWrapper::with_params(needed_h, 128)?;
             let params = wrapper.params().clone();
 
@@ -182,10 +182,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
             // Verify and time it
             let (ok, elapsed) = agg.verify_all()?;
-            println!(
-                "Verified: {} | count: {} | elapsed: {:?}",
-                ok, agg.len(), elapsed
-            );
+            println!("Verified: {} | count: {} | elapsed: {:?}", ok, agg.len(), elapsed);
         }
     }
 

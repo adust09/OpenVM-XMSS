@@ -13,16 +13,18 @@ fn bench_serialize(c: &mut Criterion) {
                 b.iter_batched(
                     || {
                         let params = wrapper.params().clone();
-                        let mut agg = SignatureAggregator::new(params);
+                        // Ensure capacity >= n to avoid overflow for n=32
+                        let mut agg = SignatureAggregator::with_capacity(params, n);
+                        // Reuse a single keypair for speed
+                        let kp = wrapper.generate_keypair().unwrap();
+                        let pk = {
+                            let guard = kp.lock().unwrap();
+                            guard.public_key().clone()
+                        };
                         for i in 0..n {
-                            let kp = wrapper.generate_keypair().unwrap();
                             let msg = format!("msg-{i}").into_bytes();
                             let sig = wrapper.sign(&kp, &msg).unwrap();
-                            let pk = {
-                                let guard = kp.lock().unwrap();
-                                guard.public_key().clone()
-                            };
-                            agg.add_signature(sig, msg, pk).unwrap();
+                            agg.add_signature(sig, msg, pk.clone()).unwrap();
                         }
                         agg
                     },
@@ -41,4 +43,3 @@ fn bench_serialize(c: &mut Criterion) {
 
 criterion_group!(benches, bench_serialize);
 criterion_main!(benches);
-

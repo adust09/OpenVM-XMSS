@@ -87,4 +87,3 @@ fn bench_verify(c: &mut Criterion) {
 
 criterion_group!(benches, bench_keygen, bench_sign, bench_verify);
 criterion_main!(benches);
-
