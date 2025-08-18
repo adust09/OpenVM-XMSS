@@ -8,6 +8,7 @@ This repository focuses on verifiable XMSS verification inside OpenVM:
 - Verify multiple XMSS signatures in a guest program
 - Generate application-level proofs (`cargo openvm prove app`)
 - Reveal pass/fail, count, and statement commitment as public values
+ - Aggregate and verify large batches (10, 100, 1,000, up to 10,000)
 
 ### In Progress 🚧
 - Guest TSL mapper and XMSS verification wiring
@@ -94,6 +95,56 @@ cargo run -p xmss-host -- verify --proof proof.bin
 ```
 
 Note: This expects `cargo-openvm` to be installed and keys generated (`cd guest && cargo openvm keygen`). If a command fails, the host will surface a helpful error.
+
+## Benchmarks
+
+Criterion benchmarks live under `lib/benches` and measure keygen, sign, verify, aggregation, and serialization.
+
+Run benches for the library package:
+
+```bash
+# Build workspace artifacts (first run may fetch deps)
+cargo build
+
+# Run benches (recommend --release)
+cargo bench -p xmss-lib -- --warm-up-time 1 --sample-size 30
+
+# View HTML reports
+open target/criterion/report/index.html
+```
+
+Bench parameters:
+- Tree heights: `h in {4, 8, 10}` (keygen), `{8, 10}` (others)
+- Batch sizes: `{1, 8, 32}` for aggregation/serialization
+- Message sizes: `{32B, 1KB, 64KB}` for signing; `{32B, 1KB}` for verify
+
+Notes:
+- Signing consumes the OTS index; benches use per-iter setup to avoid exhausting keys.
+- Aggregation benches pre-populate inputs during setup so measurements reflect verification/serialization only.
+
+### Host CLI Quick Benchmark (arbitrary N)
+
+Run an end-to-end CPU benchmark for arbitrary batch sizes using the host CLI. The command auto-selects the XMSS tree height `h` so that `2^h >= --signatures`.
+
+Examples:
+
+```bash
+# 1,000 signatures (h auto≈10; capacity inferred)
+cargo run -p xmss-host -- benchmark --signatures 1000
+
+# 10,000 signatures (h auto≈14)
+cargo run -p xmss-host -- benchmark --signatures 10000
+
+# Explicit aggregator capacity (optional; defaults to --signatures)
+cargo run -p xmss-host -- benchmark --signatures 10000 --agg-capacity 10000
+```
+
+Library-side helpers:
+- `SignatureAggregator::new()` → capacity 10
+- `SignatureAggregator::new_100()` → capacity 100
+- `SignatureAggregator::new_1000()` → capacity 1,000
+- `SignatureAggregator::new_10000()` → capacity 10,000
+- `SignatureAggregator::with_capacity(params, n)` → custom capacity
 
 ## Input Format
 

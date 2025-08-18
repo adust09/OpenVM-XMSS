@@ -53,6 +53,9 @@ enum Commands {
         /// Number of signatures to verify
         #[arg(short, long, default_value = "10")]
         signatures: usize,
+        /// Aggregator max capacity (default: equals --signatures)
+        #[arg(long)]
+        agg_capacity: Option<usize>,
     },
 }
 
@@ -147,9 +150,42 @@ async fn main() -> Result<(), Box<dyn Error>> {
             println!("Next: cd guest && cargo openvm run --input {}", output);
             println!("Guest will reveal: all_valid, count, stmt_commit (8 words)");
         }
-        Commands::Benchmark { signatures } => {
-            println!("Benchmarking with {} signatures", signatures);
-            // TODO: Implement benchmarking
+        Commands::Benchmark { signatures, agg_capacity } => {
+            use xmss_lib::xmss::{SignatureAggregator, XmssWrapper};
+            println!("Benchmarking verification with {} signatures", signatures);
+
+            // Choose the minimal tree height h such that 2^h >= signatures.
+            // Clamp to at least h=2.
+            let needed_h = ((signatures.max(1) - 1).next_power_of_two().trailing_zeros() as usize)
+                .max(2);
+            let wrapper = XmssWrapper::with_params(needed_h, 128)?;
+            let params = wrapper.params().clone();
+
+            // Capacity defaults to the requested number of signatures
+            let capacity = agg_capacity.unwrap_or(signatures);
+            let mut agg = SignatureAggregator::with_capacity(params, capacity);
+
+            // Generate a single keypair and reuse it for speed. This is safe as long as
+            // signatures <= 2^h for the chosen h (ensured by needed_h above).
+            let keypair = wrapper.generate_keypair()?;
+            let public_key = {
+                let kp = keypair.lock().unwrap();
+                kp.public_key().clone()
+            };
+
+            // Populate aggregator
+            for i in 0..signatures {
+                let msg = format!("bench-msg-{}", i).into_bytes();
+                let sig = wrapper.sign(&keypair, &msg)?;
+                agg.add_signature(sig, msg, public_key.clone())?;
+            }
+
+            // Verify and time it
+            let (ok, elapsed) = agg.verify_all()?;
+            println!(
+                "Verified: {} | count: {} | elapsed: {:?}",
+                ok, agg.len(), elapsed
+            );
         }
     }
 
