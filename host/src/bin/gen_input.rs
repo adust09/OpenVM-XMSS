@@ -1,8 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use openvm; // ensure the crate is linked for serde
-use shared::{VerificationBatch, TslParams, Statement, Witness};
+use shared::{Statement, TslParams, VerificationBatch, Witness};
 
 fn to_hex(bytes: &[u8]) -> String {
     const HEX: &[u8; 16] = b"0123456789abcdef";
@@ -24,7 +23,9 @@ fn main() {
     // Serialize using OpenVM serde
     let words: Vec<u32> = openvm::serde::to_vec(&batch).expect("serialize batch");
     let mut bytes = Vec::with_capacity(words.len() * 4);
-    for w in words { bytes.extend_from_slice(&w.to_le_bytes()); }
+    for w in words {
+        bytes.extend_from_slice(&w.to_le_bytes());
+    }
     let hex = to_hex(&bytes);
     let wrapped = format!("0x01{}", hex);
     let json = format!("{{\n  \"input\": [\"{}\"]\n}}\n", wrapped);

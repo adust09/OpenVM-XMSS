@@ -110,6 +110,7 @@ mod tests {
     use super::*;
     use openvm_sha2::set_sha256;
     use std::vec;
+    use shared::{Statement, CompactPublicKey};
 
     #[test]
     fn merkle_root_two_levels() {
@@ -144,5 +145,31 @@ mod tests {
         buf[41..73].copy_from_slice(&h); buf[73..105].copy_from_slice(&sib2); set_sha256(&buf, &mut h);
         assert_eq!(r1, h);
         assert_ne!(r0, r1);
+    }
+
+    #[test]
+    fn statement_commit_deterministic() {
+        // Build a small statement and check the commitment against manual hashing
+        let stmt = Statement {
+            k: 1,
+            ep: 0,
+            m: b"single".to_vec(),
+            public_keys: vec![CompactPublicKey { root: [0u8;32], seed: [0u8;32] }],
+        };
+        let got = statement_commitment(&stmt);
+
+        // Manual encode: k||ep||len(m)||m||len(pks)||pk0.root||pk0.seed
+        let mut buf = vec![];
+        buf.extend_from_slice(&stmt.k.to_le_bytes());
+        buf.extend_from_slice(&stmt.ep.to_le_bytes());
+        let mlen: u32 = stmt.m.len() as u32;
+        buf.extend_from_slice(&mlen.to_le_bytes());
+        buf.extend_from_slice(&stmt.m);
+        let pklen: u32 = stmt.public_keys.len() as u32;
+        buf.extend_from_slice(&pklen.to_le_bytes());
+        for pk in &stmt.public_keys { buf.extend_from_slice(&pk.root); buf.extend_from_slice(&pk.seed); }
+        let mut exp = [0u8;32];
+        set_sha256(&buf, &mut exp);
+        assert_eq!(got, exp);
     }
 }

@@ -1,4 +1,4 @@
-use hypercube_signatures::xmss::{XMSSKeypair, XMSSSignature, XMSSParams, XMSSPublicKey};
+use hypercube_signatures::xmss::{XMSSKeypair, XMSSParams, XMSSPublicKey, XMSSSignature};
 use std::error::Error;
 use std::sync::Mutex;
 
@@ -30,13 +30,22 @@ impl XmssWrapper {
     }
 
     /// Sign a message (requires mutable keypair due to state update)
-    pub fn sign(&self, keypair: &Mutex<XMSSKeypair>, message: &[u8]) -> Result<XMSSSignature, Box<dyn Error>> {
+    pub fn sign(
+        &self,
+        keypair: &Mutex<XMSSKeypair>,
+        message: &[u8],
+    ) -> Result<XMSSSignature, Box<dyn Error>> {
         let mut kp = keypair.lock().map_err(|e| format!("Failed to lock keypair: {}", e))?;
         Ok(kp.sign(message))
     }
 
     /// Verify a signature
-    pub fn verify(&self, public_key: &XMSSPublicKey, message: &[u8], signature: &XMSSSignature) -> Result<bool, Box<dyn Error>> {
+    pub fn verify(
+        &self,
+        public_key: &XMSSPublicKey,
+        message: &[u8],
+        signature: &XMSSSignature,
+    ) -> Result<bool, Box<dyn Error>> {
         Ok(public_key.verify(message, signature, &self.params))
     }
 

@@ -69,10 +69,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
             // Copy proof out to requested location
             let guest_proof = Path::new("guest").join("xmss-guest.app.proof");
             if !guest_proof.exists() {
-                return Err(format!("Expected proof at {:?} but not found. Did keygen/build finish?", guest_proof).into());
+                return Err(format!(
+                    "Expected proof at {:?} but not found. Did keygen/build finish?",
+                    guest_proof
+                )
+                .into());
             }
             let out_path = PathBuf::from(output);
-            if let Some(parent) = out_path.parent() { std::fs::create_dir_all(parent)?; }
+            if let Some(parent) = out_path.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
             std::fs::copy(&guest_proof, &out_path)?;
             println!("Proof saved to {}", out_path.display());
         }
@@ -81,9 +87,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
             // Place the proof where OpenVM expects by default
             let proof_abs = to_abs(&proof)?;
             let guest_proof = Path::new("guest").join("xmss-guest.app.proof");
-            if let Some(parent) = guest_proof.parent() { std::fs::create_dir_all(parent)?; }
+            if let Some(parent) = guest_proof.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
             std::fs::copy(&proof_abs, &guest_proof)?;
-            run_in_guest(["openvm", "verify", "app"])?
+            run_in_guest(["openvm", "verify", "app"])?;
             println!("Proof verified successfully");
         }
         Commands::SingleGen { output } => {
@@ -91,7 +99,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
             // verification is trivially satisfiable for any chosen 32-byte element.
             // Choice: w=2, v=1, d0=1 -> steps = [1]; t=(w-1-1)=0 so no chain hashing.
             // tree_height=0 -> root = leaf = H(sig_elem).
-            use shared::{CompactPublicKey, CompactSignature, VerificationBatch, TslParams, Statement, Witness};
+            use shared::{
+                CompactPublicKey, CompactSignature, Statement, TslParams, VerificationBatch,
+                Witness,
+            };
 
             // Pick a deterministic signature element and compute its leaf/root = sha256(elem)
             let sig_elem = [0x11u8; 32];
@@ -99,7 +110,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             // Host-side SHA-256
             use sha2::{Digest, Sha256};
             let mut hasher = Sha256::new();
-            hasher.update(&sig_elem);
+            hasher.update(sig_elem);
             let leaf_hash = hasher.finalize();
             let mut root = [0u8; 32];
             root.copy_from_slice(&leaf_hash);
@@ -113,27 +124,24 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let pk = CompactPublicKey { root, seed: [0u8; 32] };
 
             let params = TslParams { w: 2, v: 1, d0: 1, security_bits: 128, tree_height: 0 };
-            let statement = Statement {
-                k: 1,
-                ep: 0,
-                m: b"single".to_vec(),
-                public_keys: vec![pk],
-            };
-            let witness = Witness {
-                signatures: vec![sig],
-            };
+            let statement = Statement { k: 1, ep: 0, m: b"single".to_vec(), public_keys: vec![pk] };
+            let witness = Witness { signatures: vec![sig] };
             let batch = VerificationBatch { params, statement, witness };
 
             // Serialize with OpenVM serde (LE u32 words) and wrap into JSON
             let words: Vec<u32> = openvm::serde::to_vec(&batch).expect("serialize batch");
             let mut bytes = Vec::with_capacity(words.len() * 4);
-            for w in words { bytes.extend_from_slice(&w.to_le_bytes()); }
+            for w in words {
+                bytes.extend_from_slice(&w.to_le_bytes());
+            }
 
             // JSON shape: { "input": ["0x<hex>"] }
             let hex = util::to_hex_prefixed(&bytes);
             let json = serde_json::json!({ "input": [ hex ] });
 
-            std::fs::create_dir_all(std::path::Path::new(&output).parent().unwrap_or_else(|| std::path::Path::new(".")))?;
+            std::fs::create_dir_all(
+                std::path::Path::new(&output).parent().unwrap_or_else(|| std::path::Path::new(".")),
+            )?;
             std::fs::write(&output, serde_json::to_string_pretty(&json)?)?;
             println!("Wrote single-signature input to {}", output);
             println!("Next: cd guest && cargo openvm run --input {}", output);
@@ -151,7 +159,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 fn run_in_guest<const N: usize>(args: [&str; N]) -> Result<(), Box<dyn Error>> {
     let mut cmd = Command::new("cargo");
     cmd.current_dir("guest");
-    for a in ["openvm"].into_iter().chain(args.into_iter()) { cmd.arg(a); }
+    for a in ["openvm"].into_iter().chain(args.into_iter()) {
+        cmd.arg(a);
+    }
     let status = cmd.status()?;
     if !status.success() {
         return Err(format!(
@@ -164,6 +174,8 @@ fn run_in_guest<const N: usize>(args: [&str; N]) -> Result<(), Box<dyn Error>> {
 
 fn to_abs(p: &str) -> Result<PathBuf, Box<dyn Error>> {
     let pb = PathBuf::from(p);
-    if pb.is_absolute() { return Ok(pb); }
+    if pb.is_absolute() {
+        return Ok(pb);
+    }
     Ok(std::fs::canonicalize(pb)?)
 }

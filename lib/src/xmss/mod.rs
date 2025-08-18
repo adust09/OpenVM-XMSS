@@ -1,8 +1,8 @@
-pub mod wrapper;
 pub mod aggregator;
+pub mod wrapper;
 
-pub use wrapper::XmssWrapper;
 pub use aggregator::SignatureAggregator;
+pub use wrapper::XmssWrapper;
 
 #[cfg(test)]
 mod tests {
