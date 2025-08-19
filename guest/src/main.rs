@@ -17,7 +17,7 @@ fn main() {
     for (i, chunk) in h.chunks(4).enumerate() {
         let mut w = [0u8; 4];
         w.copy_from_slice(chunk);
-        reveal_u32(u32::from_le_bytes(w), (2 + i) as u32);
+        reveal_u32(u32::from_le_bytes(w), ((2 + i) as u32).try_into().unwrap());
     }
 }
 

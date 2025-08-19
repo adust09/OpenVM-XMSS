@@ -71,20 +71,14 @@ Note: This expects `cargo-openvm` to be installed and keys generated (`cd guest 
 This repository provides OpenVM end-to-end benchmarking capabilities. Measure OpenVM execution times for `run` / `prove app` / `verify app` from the host. This focuses on wall-clock time of the OpenVM CLI, not CPU-only signature verification.
 
 ```bash
-# run: generates a valid input if missing (with --generate-input)
-cargo run -p xmss-host --bin xmss-host -- benchmark-openvm run --generate-input --iterations 3
-
 # run with 100 signatures for more realistic benchmarking
 cargo run -p xmss-host --bin xmss-host -- benchmark-openvm run --signatures 100 --generate-input --iterations 3
 
-# prove app: measure app proof generation time using input.json
-cargo run -p xmss-host --bin xmss-host -- benchmark-openvm prove --input guest/input.json --iterations 3
-
-# prove app with 1000 signatures
-cargo run -p xmss-host --bin xmss-host -- benchmark-openvm prove --signatures 1000 --generate-input --iterations 1
+# prove app with 100 signatures
+cargo run -p xmss-host --bin xmss-host -- benchmark-openvm prove --signatures 100 --generate-input --iterations 1
 
 # verify app: measure proof verification (optionally specify a proof to copy in first)
-cargo run -p xmss-host --bin xmss-host -- benchmark-openvm verify --proof proof.bin --iterations 5
+cargo run -p xmss-host --bin xmss-host -- benchmark-openvm verify --proof guest/xmss-guest.app.proof --iterations 5
 ```
 
 
@@ -96,3 +90,44 @@ cargo run -p xmss-host --bin xmss-host -- benchmark-openvm verify --proof proof.
 
  automatically calculated based on signature count: `h >= log2(signatures)`
 
+### Getting Started: HTML Report
+
+You can run the three “Getting Started” steps end-to-end and emit a compact HTML report summarizing success/failure, durations, and artifact paths.
+
+```bash
+# Writes report/getting-started.html by default
+cargo run -p xmss-host --bin xmss-host -- report-getting-started \
+  --input guest/input.json \
+  --proof proof.bin \
+  --output report/getting-started.html
+
+# Open the report
+open report/getting-started.html        # macOS
+# or: xdg-open report/getting-started.html  # Linux
+```
+
+Notes:
+- This subcommand internally performs: single-gen → prove (OpenVM) → verify (OpenVM).
+- Requires `cargo-openvm` installed and guest build/keys set up (same as the individual steps).
+
+## HTML Benchmark Reports
+
+Criterion is enabled with HTML reports for both `xmss-lib` and `xmss-host` benches.
+
+- Run library benches: `cargo bench -p xmss-lib`
+- Run host benches: `cargo bench -p xmss-host`
+
+After a run, open the generated report:
+
+- Aggregate report: `target/criterion/report/index.html`
+- Per-benchmark report: `target/criterion/<group>/report/index.html` (e.g., `target/criterion/xmss_keygen/report/index.html` or `target/criterion/host_aggregate_verify/report/index.html`).
+
+Quick open examples:
+
+- macOS: `open target/criterion/report/index.html`
+- Linux: `xdg-open target/criterion/report/index.html`
+
+Notes:
+
+- `criterion` is already configured with `features = ["html_reports"]` in each crate.
+- `cargo bench` uses an optimized profile; no extra flags are needed. If you disable default features, ensure `--features html_reports` remains enabled for HTML output.

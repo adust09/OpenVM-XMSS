@@ -78,6 +78,18 @@ enum Commands {
         #[arg(short, long, default_value_t = 1)]
         signatures: usize,
     },
+    /// Run the three Getting Started steps and emit an HTML report
+    ReportGettingStarted {
+        /// Output HTML report path
+        #[arg(short, long, default_value = "report/getting-started.html")]
+        output: String,
+        /// Input JSON path for guest
+        #[arg(short, long, default_value = "guest/input.json")]
+        input: String,
+        /// Proof file path to export and verify
+        #[arg(short, long, default_value = "proof.bin")]
+        proof: String,
+    },
 }
 
 #[derive(Copy, Clone, Debug, ValueEnum)]
@@ -133,7 +145,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 if generate_input || !inp_path.exists() {
                     println!(
                         "Generating input with {} signatures at {}...",
-                        signatures, inp_path.display()
+                        signatures,
+                        inp_path.display()
                     );
                     generate_batch_input(signatures, &input)?;
                 }
@@ -177,12 +190,131 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 }
             }
             if iterations > 1 {
-                println!(
-                    "Average over {} iters: {:?}",
-                    iterations,
-                    total / (iterations as u32)
-                );
+                println!("Average over {} iters: {:?}", iterations, total / (iterations as u32));
             }
+        }
+        Commands::ReportGettingStarted { output, input, proof } => {
+            use std::time::Instant;
+
+            struct StepRes {
+                name: &'static str,
+                ok: bool,
+                elapsed: std::time::Duration,
+                detail: Option<String>,
+                artifact: Option<String>,
+            }
+
+            let mut results: Vec<StepRes> = Vec::new();
+
+            // Step 1: single-gen (generate input)
+            let t0 = Instant::now();
+            let r1 = match generate_batch_input(1, &input) {
+                Ok(()) => StepRes {
+                    name: "single-gen",
+                    ok: true,
+                    elapsed: t0.elapsed(),
+                    detail: None,
+                    artifact: Some(input.clone()),
+                },
+                Err(e) => StepRes {
+                    name: "single-gen",
+                    ok: false,
+                    elapsed: t0.elapsed(),
+                    detail: Some(format!("{}", e)),
+                    artifact: Some(input.clone()),
+                },
+            };
+            results.push(r1);
+
+            // Step 2: prove (prove app and export proof)
+            let t1 = Instant::now();
+            let mut r2 = StepRes {
+                name: "prove",
+                ok: false,
+                elapsed: std::time::Duration::ZERO,
+                detail: None,
+                artifact: Some(proof.clone()),
+            };
+            let prove_res = (|| -> Result<(), Box<dyn Error>> {
+                let input_abs = to_abs(&input)?;
+                run_in_guest(["prove", "app", "--input", input_abs.to_str().unwrap()])?;
+                let guest_proof = std::path::Path::new("guest").join("xmss-guest.app.proof");
+                if !guest_proof.exists() {
+                    return Err(format!("Expected proof at {:?} but not found.", guest_proof).into());
+                }
+                let out_path = PathBuf::from(&proof);
+                if let Some(parent) = out_path.parent() { std::fs::create_dir_all(parent)?; }
+                std::fs::copy(&guest_proof, &out_path)?;
+                Ok(())
+            })();
+            r2.elapsed = t1.elapsed();
+            match prove_res {
+                Ok(()) => { r2.ok = true; }
+                Err(e) => { r2.detail = Some(format!("{}", e)); }
+            }
+            results.push(r2);
+
+            // Step 3: verify (verify app using proof)
+            let t2 = Instant::now();
+            let mut r3 = StepRes {
+                name: "verify",
+                ok: false,
+                elapsed: std::time::Duration::ZERO,
+                detail: None,
+                artifact: Some(proof.clone()),
+            };
+            let verify_res = (|| -> Result<(), Box<dyn Error>> {
+                let proof_abs = to_abs(&proof)?;
+                let guest_proof = std::path::Path::new("guest").join("xmss-guest.app.proof");
+                if let Some(parent) = guest_proof.parent() { std::fs::create_dir_all(parent)?; }
+                std::fs::copy(&proof_abs, &guest_proof)?;
+                run_in_guest(["verify", "app"])?;
+                Ok(())
+            })();
+            r3.elapsed = t2.elapsed();
+            match verify_res {
+                Ok(()) => { r3.ok = true; }
+                Err(e) => { r3.detail = Some(format!("{}", e)); }
+            }
+            results.push(r3);
+
+            // Build HTML
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| format!("{}", d.as_secs()))
+                .unwrap_or_else(|_| "unknown".to_string());
+            let mut html = String::new();
+            html.push_str("<!DOCTYPE html><html><head><meta charset='utf-8'><title>Getting Started Report</title>\n");
+            html.push_str("<style>body{font-family:system-ui,Arial,sans-serif;margin:24px} table{border-collapse:collapse;width:100%} th,td{border:1px solid #ddd;padding:8px} th{background:#f5f5f5;text-align:left} .ok{color:#0a7a39;font-weight:600} .fail{color:#b00020;font-weight:600}</style>");
+            html.push_str("</head><body>\n");
+            html.push_str(&format!("<h1>Getting Started HTML Report</h1><p>Generated: {}</p>", html_escape(&now)));
+            html.push_str("<table><thead><tr><th>Step</th><th>Status</th><th>Duration</th><th>Artifact</th><th>Detail</th></tr></thead><tbody>");
+            for r in &results {
+                let status = if r.ok { "OK" } else { "FAIL" };
+                let cls = if r.ok { "ok" } else { "fail" };
+                let art = r.artifact.as_ref().map(|s| html_escape(s)).unwrap_or_default();
+                let det = r.detail.as_ref().map(|s| html_escape(s)).unwrap_or_default();
+                html.push_str(&format!(
+                    "<tr><td>{}</td><td class='{}'>{}</td><td>{:?}</td><td><code>{}</code></td><td>{}</td></tr>",
+                    r.name, cls, status, r.elapsed, art, det
+                ));
+            }
+            html.push_str("</tbody></table>");
+            html.push_str("<p>Commands performed are equivalent to:</p><pre><code>xmss-host single-gen --output ");
+            html.push_str(&html_escape(&input));
+            html.push_str("\nxmss-host prove --input ");
+            html.push_str(&html_escape(&input));
+            html.push_str(" --output ");
+            html.push_str(&html_escape(&proof));
+            html.push_str("\nxmss-host verify --proof ");
+            html.push_str(&html_escape(&proof));
+            html.push_str("</code></pre>");
+            html.push_str("</body></html>");
+
+            let out_path = std::path::Path::new(&output);
+            if let Some(parent) = out_path.parent() { std::fs::create_dir_all(parent)?; }
+            std::fs::write(out_path, html)?;
+            println!("Wrote HTML report to {}", out_path.display());
         }
         Commands::SingleGen { output } => {
             generate_batch_input(1, &output)?;
@@ -266,6 +398,21 @@ fn to_abs(p: &str) -> Result<PathBuf, Box<dyn Error>> {
     Ok(std::fs::canonicalize(pb)?)
 }
 
+fn html_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for ch in s.chars() {
+        match ch {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&#39;"),
+            _ => out.push(ch),
+        }
+    }
+    out
+}
+
 // Helpers reused by single-gen and OpenVM benchmarking
 fn write_input_json<T: serde::Serialize>(batch: &T, output: &str) -> Result<(), Box<dyn Error>> {
     // Serialize with OpenVM serde (LE u32 words) and wrap into JSON
@@ -275,8 +422,15 @@ fn write_input_json<T: serde::Serialize>(batch: &T, output: &str) -> Result<(), 
         bytes.extend_from_slice(&w.to_le_bytes());
     }
 
-    // JSON shape: { "input": ["0x<hex>"] }
-    let hex = util::to_hex_prefixed(&bytes);
+    // OpenVM JSON expects a leading 0x01 byte before the LE-encoded payload
+    // Shape: { "input": ["0x01<hex-of-bytes>"] }
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut hex = String::with_capacity(2 + 2 + bytes.len() * 2);
+    hex.push_str("0x01");
+    for &b in &bytes {
+        hex.push(HEX[(b >> 4) as usize] as char);
+        hex.push(HEX[(b & 0x0f) as usize] as char);
+    }
     let json = serde_json::json!({ "input": [ hex ] });
 
     let out_path = std::path::Path::new(output);
@@ -288,53 +442,52 @@ fn write_input_json<T: serde::Serialize>(batch: &T, output: &str) -> Result<(), 
 }
 
 fn generate_batch_input(signatures: usize, output: &str) -> Result<(), Box<dyn Error>> {
-    use shared::{CompactPublicKey, CompactSignature, Statement, TslParams, VerificationBatch, Witness};
     use sha2::{Digest, Sha256};
-    
+    use shared::{
+        CompactPublicKey, CompactSignature, Statement, TslParams, VerificationBatch, Witness,
+    };
+
     // Use simple TSL parameters that work with the guest
     // Based on the original single-gen logic but extended for multiple signatures
-    let params = TslParams { 
-        w: 2, 
-        v: 1, 
-        d0: 1, 
-        security_bits: 128, 
-        tree_height: ((signatures.max(1) - 1).next_power_of_two().trailing_zeros() as u16).max(2)
+    let params = TslParams {
+        w: 2,
+        v: 1,
+        d0: 1,
+        security_bits: 128,
+        tree_height: ((signatures.max(1) - 1).next_power_of_two().trailing_zeros() as u16).max(2),
     };
-    
+
     // Generate deterministic signatures - each with a different signature element
     let mut signatures_vec = Vec::with_capacity(signatures);
     let mut public_keys_vec = Vec::with_capacity(signatures);
-    
+
     for i in 0..signatures {
         // Create deterministic signature element for this signature
         let mut sig_elem = [0x11u8; 32];
         // Make each signature unique by modifying the first few bytes
         let idx_bytes = (i as u32).to_le_bytes();
         sig_elem[0..4].copy_from_slice(&idx_bytes);
-        
+
         // Compute leaf/root = sha256(sig_elem)
         let mut hasher = Sha256::new();
         hasher.update(sig_elem);
         let leaf_hash = hasher.finalize();
         let mut root = [0u8; 32];
         root.copy_from_slice(&leaf_hash);
-        
+
         let sig = CompactSignature {
             leaf_index: i as u32,
             randomness: [0u8; 32],
             wots_signature: vec![sig_elem],
             auth_path: vec![],
         };
-        
-        let pk = CompactPublicKey { 
-            root, 
-            seed: [0u8; 32] 
-        };
-        
+
+        let pk = CompactPublicKey { root, seed: [0u8; 32] };
+
         signatures_vec.push(sig);
         public_keys_vec.push(pk);
     }
-    
+
     // Build VerificationBatch
     let statement = Statement {
         k: signatures as u32,
@@ -342,16 +495,10 @@ fn generate_batch_input(signatures: usize, output: &str) -> Result<(), Box<dyn E
         m: b"openvm-batch-message".to_vec(),
         public_keys: public_keys_vec,
     };
-    
-    let witness = Witness {
-        signatures: signatures_vec,
-    };
-    
-    let batch = VerificationBatch {
-        params,
-        statement,
-        witness,
-    };
-    
+
+    let witness = Witness { signatures: signatures_vec };
+
+    let batch = VerificationBatch { params, statement, witness };
+
     write_input_json(&batch, output)
 }
