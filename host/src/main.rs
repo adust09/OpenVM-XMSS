@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use std::error::Error;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -57,6 +57,34 @@ enum Commands {
         #[arg(long)]
         agg_capacity: Option<usize>,
     },
+    /// Benchmark OpenVM end-to-end wall-clock time for run/prove/verify
+    BenchmarkOpenvm {
+        /// Operation to benchmark: run | prove | verify
+        #[arg(value_enum)]
+        op: OvOp,
+        /// Input JSON path for run/prove (auto-generated if missing with --generate-input)
+        #[arg(short, long, default_value = "guest/input.json")]
+        input: String,
+        /// Proof file for verify (if provided, copied into guest/ before verifying)
+        #[arg(short, long)]
+        proof: Option<String>,
+        /// Number of iterations to run
+        #[arg(short = 'n', long, default_value_t = 1)]
+        iterations: usize,
+        /// Generate a valid input JSON if missing
+        #[arg(long)]
+        generate_input: bool,
+        /// Number of signatures to generate for benchmarking
+        #[arg(short, long, default_value_t = 1)]
+        signatures: usize,
+    },
+}
+
+#[derive(Copy, Clone, Debug, ValueEnum)]
+enum OvOp {
+    Run,
+    Prove,
+    Verify,
 }
 
 #[tokio::main]
@@ -67,7 +95,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         Commands::Prove { input, output } => {
             println!("Generating OpenVM app proof using {}", input);
             let input_abs = to_abs(&input)?;
-            run_in_guest(["openvm", "prove", "app", "--input", input_abs.to_str().unwrap()])?;
+            run_in_guest(["prove", "app", "--input", input_abs.to_str().unwrap()])?;
 
             // Copy proof out to requested location
             let guest_proof = Path::new("guest").join("xmss-guest.app.proof");
@@ -94,58 +122,70 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 std::fs::create_dir_all(parent)?;
             }
             std::fs::copy(&proof_abs, &guest_proof)?;
-            run_in_guest(["openvm", "verify", "app"])?;
+            run_in_guest(["verify", "app"])?;
             println!("Proof verified successfully");
         }
-        Commands::SingleGen { output } => {
-            // Construct a VerificationBatch with parameters chosen so that
-            // verification is trivially satisfiable for any chosen 32-byte element.
-            // Choice: w=2, v=1, d0=1 -> steps = [1]; t=(w-1-1)=0 so no chain hashing.
-            // tree_height=0 -> root = leaf = H(sig_elem).
-            use shared::{
-                CompactPublicKey, CompactSignature, Statement, TslParams, VerificationBatch,
-                Witness,
-            };
-
-            // Pick a deterministic signature element and compute its leaf/root = sha256(elem)
-            let sig_elem = [0x11u8; 32];
-
-            // Host-side SHA-256
-            use sha2::{Digest, Sha256};
-            let mut hasher = Sha256::new();
-            hasher.update(sig_elem);
-            let leaf_hash = hasher.finalize();
-            let mut root = [0u8; 32];
-            root.copy_from_slice(&leaf_hash);
-
-            let sig = CompactSignature {
-                leaf_index: 0,
-                randomness: [0u8; 32],
-                wots_signature: vec![sig_elem],
-                auth_path: vec![],
-            };
-            let pk = CompactPublicKey { root, seed: [0u8; 32] };
-
-            let params = TslParams { w: 2, v: 1, d0: 1, security_bits: 128, tree_height: 0 };
-            let statement = Statement { k: 1, ep: 0, m: b"single".to_vec(), public_keys: vec![pk] };
-            let witness = Witness { signatures: vec![sig] };
-            let batch = VerificationBatch { params, statement, witness };
-
-            // Serialize with OpenVM serde (LE u32 words) and wrap into JSON
-            let words: Vec<u32> = openvm::serde::to_vec(&batch).expect("serialize batch");
-            let mut bytes = Vec::with_capacity(words.len() * 4);
-            for w in words {
-                bytes.extend_from_slice(&w.to_le_bytes());
+        Commands::BenchmarkOpenvm { op, input, proof, iterations, generate_input, signatures } => {
+            use std::time::Instant;
+            // Ensure input exists if needed
+            if matches!(op, OvOp::Run | OvOp::Prove) {
+                let inp_path = Path::new(&input);
+                if generate_input || !inp_path.exists() {
+                    println!(
+                        "Generating input with {} signatures at {}...",
+                        signatures, inp_path.display()
+                    );
+                    generate_batch_input(signatures, &input)?;
+                }
             }
 
-            // JSON shape: { "input": ["0x<hex>"] }
-            let hex = util::to_hex_prefixed(&bytes);
-            let json = serde_json::json!({ "input": [ hex ] });
-
-            std::fs::create_dir_all(
-                std::path::Path::new(&output).parent().unwrap_or_else(|| std::path::Path::new(".")),
-            )?;
-            std::fs::write(&output, serde_json::to_string_pretty(&json)?)?;
+            let mut total = std::time::Duration::ZERO;
+            for i in 0..iterations {
+                match op {
+                    OvOp::Run => {
+                        let input_abs = to_abs(&input)?;
+                        let t0 = Instant::now();
+                        run_in_guest(["run", "--input", input_abs.to_str().unwrap()])?;
+                        let dt = t0.elapsed();
+                        println!("[{}] OpenVM run elapsed: {:?}", i + 1, dt);
+                        total += dt;
+                    }
+                    OvOp::Prove => {
+                        let input_abs = to_abs(&input)?;
+                        let t0 = Instant::now();
+                        run_in_guest(["prove", "app", "--input", input_abs.to_str().unwrap()])?;
+                        let dt = t0.elapsed();
+                        println!("[{}] OpenVM prove(app) elapsed: {:?}", i + 1, dt);
+                        total += dt;
+                    }
+                    OvOp::Verify => {
+                        // If a proof path is given, copy it into guest expected location
+                        if let Some(p) = &proof {
+                            let proof_abs = to_abs(p)?;
+                            let guest_proof = Path::new("guest").join("xmss-guest.app.proof");
+                            if let Some(parent) = guest_proof.parent() {
+                                std::fs::create_dir_all(parent)?;
+                            }
+                            std::fs::copy(&proof_abs, &guest_proof)?;
+                        }
+                        let t0 = Instant::now();
+                        run_in_guest(["verify", "app"])?;
+                        let dt = t0.elapsed();
+                        println!("[{}] OpenVM verify(app) elapsed: {:?}", i + 1, dt);
+                        total += dt;
+                    }
+                }
+            }
+            if iterations > 1 {
+                println!(
+                    "Average over {} iters: {:?}",
+                    iterations,
+                    total / (iterations as u32)
+                );
+            }
+        }
+        Commands::SingleGen { output } => {
+            generate_batch_input(1, &output)?;
             println!("Wrote single-signature input to {}", output);
             println!("Next: cd guest && cargo openvm run --input {}", output);
             println!("Guest will reveal: all_valid, count, stmt_commit (8 words)");
@@ -161,8 +201,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let wrapper = XmssWrapper::with_params(needed_h, 128)?;
             let params = wrapper.params().clone();
 
-            // Capacity defaults to the requested number of signatures
-            let _capacity = agg_capacity.unwrap_or(signatures);
+            // Aggregator capacity: default to requested number of signatures
+            // Passing a smaller capacity will chunk the workload accordingly.
+            let capacity = agg_capacity.unwrap_or(signatures).max(1);
 
             // Generate a single keypair and reuse it for speed. This is safe as long as
             // signatures <= 2^h for the chosen h (ensured by needed_h above).
@@ -180,13 +221,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 items.push((msg, sig));
             }
 
-            // Fallback-friendly verification: process in chunks that fit default aggregator capacity
-            // Many implementations default to capacity 10
-            let chunk_cap = 10usize;
+            // Verify in chunks that fit the chosen aggregator capacity
+            let chunk_cap = capacity;
             let mut all_ok = true;
             let mut total = std::time::Duration::from_secs(0);
             for chunk in items.chunks(chunk_cap) {
-                let mut agg = SignatureAggregator::new(wrapper.params().clone());
+                let mut agg = SignatureAggregator::with_capacity(params.clone(), chunk_cap);
                 for (msg, sig) in chunk.iter() {
                     agg.add_signature(sig.clone(), msg.clone(), public_key.clone())?;
                 }
@@ -224,4 +264,94 @@ fn to_abs(p: &str) -> Result<PathBuf, Box<dyn Error>> {
         return Ok(pb);
     }
     Ok(std::fs::canonicalize(pb)?)
+}
+
+// Helpers reused by single-gen and OpenVM benchmarking
+fn write_input_json<T: serde::Serialize>(batch: &T, output: &str) -> Result<(), Box<dyn Error>> {
+    // Serialize with OpenVM serde (LE u32 words) and wrap into JSON
+    let words: Vec<u32> = openvm::serde::to_vec(batch).expect("serialize batch");
+    let mut bytes = Vec::with_capacity(words.len() * 4);
+    for w in words {
+        bytes.extend_from_slice(&w.to_le_bytes());
+    }
+
+    // JSON shape: { "input": ["0x<hex>"] }
+    let hex = util::to_hex_prefixed(&bytes);
+    let json = serde_json::json!({ "input": [ hex ] });
+
+    let out_path = std::path::Path::new(output);
+    if let Some(parent) = out_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(out_path, serde_json::to_string_pretty(&json)?)?;
+    Ok(())
+}
+
+fn generate_batch_input(signatures: usize, output: &str) -> Result<(), Box<dyn Error>> {
+    use shared::{CompactPublicKey, CompactSignature, Statement, TslParams, VerificationBatch, Witness};
+    use sha2::{Digest, Sha256};
+    
+    // Use simple TSL parameters that work with the guest
+    // Based on the original single-gen logic but extended for multiple signatures
+    let params = TslParams { 
+        w: 2, 
+        v: 1, 
+        d0: 1, 
+        security_bits: 128, 
+        tree_height: ((signatures.max(1) - 1).next_power_of_two().trailing_zeros() as u16).max(2)
+    };
+    
+    // Generate deterministic signatures - each with a different signature element
+    let mut signatures_vec = Vec::with_capacity(signatures);
+    let mut public_keys_vec = Vec::with_capacity(signatures);
+    
+    for i in 0..signatures {
+        // Create deterministic signature element for this signature
+        let mut sig_elem = [0x11u8; 32];
+        // Make each signature unique by modifying the first few bytes
+        let idx_bytes = (i as u32).to_le_bytes();
+        sig_elem[0..4].copy_from_slice(&idx_bytes);
+        
+        // Compute leaf/root = sha256(sig_elem)
+        let mut hasher = Sha256::new();
+        hasher.update(sig_elem);
+        let leaf_hash = hasher.finalize();
+        let mut root = [0u8; 32];
+        root.copy_from_slice(&leaf_hash);
+        
+        let sig = CompactSignature {
+            leaf_index: i as u32,
+            randomness: [0u8; 32],
+            wots_signature: vec![sig_elem],
+            auth_path: vec![],
+        };
+        
+        let pk = CompactPublicKey { 
+            root, 
+            seed: [0u8; 32] 
+        };
+        
+        signatures_vec.push(sig);
+        public_keys_vec.push(pk);
+    }
+    
+    // Build VerificationBatch
+    let statement = Statement {
+        k: signatures as u32,
+        ep: 0,
+        m: b"openvm-batch-message".to_vec(),
+        public_keys: public_keys_vec,
+    };
+    
+    let witness = Witness {
+        signatures: signatures_vec,
+    };
+    
+    let batch = VerificationBatch {
+        params,
+        statement,
+        witness,
+    };
+    
+    write_input_json(&batch, output)
 }
