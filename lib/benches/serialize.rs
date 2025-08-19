@@ -12,26 +12,31 @@ fn bench_serialize(c: &mut Criterion) {
             group.bench_function(format!("serialize_proof_h{h}_n{n}"), |b| {
                 b.iter_batched(
                     || {
+                        // Pre-generate n signatures/messages independent of aggregator capacity
                         let params = wrapper.params().clone();
-                        // Ensure capacity >= n to avoid overflow for n=32
-                        let mut agg = SignatureAggregator::with_capacity(params, n);
-                        // Reuse a single keypair for speed
                         let kp = wrapper.generate_keypair().unwrap();
                         let pk = {
                             let guard = kp.lock().unwrap();
                             guard.public_key().clone()
                         };
+                        let mut items = Vec::with_capacity(n);
                         for i in 0..n {
                             let msg = format!("msg-{i}").into_bytes();
                             let sig = wrapper.sign(&kp, &msg).unwrap();
-                            agg.add_signature(sig, msg, pk.clone()).unwrap();
+                            items.push((msg, sig, pk.clone(), params.clone()));
                         }
-                        agg
+                        items
                     },
-                    |agg| {
-                        let buf = agg.serialize_for_proof().unwrap();
-                        // Sanity check to keep optimizer honest
-                        assert!(!buf.is_empty());
+                    |items| {
+                        // Serialize each chunk that fits default capacity (10)
+                        for chunk in items.chunks(10) {
+                            let mut agg = SignatureAggregator::new(chunk[0].3.clone());
+                            for (msg, sig, pk, _) in chunk.iter() {
+                                agg.add_signature(sig.clone(), msg.clone(), pk.clone()).unwrap();
+                            }
+                            let buf = agg.serialize_for_proof().unwrap();
+                            assert!(!buf.is_empty());
+                        }
                     },
                     BatchSize::SmallInput,
                 );

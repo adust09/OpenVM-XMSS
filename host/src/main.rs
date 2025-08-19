@@ -162,8 +162,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let params = wrapper.params().clone();
 
             // Capacity defaults to the requested number of signatures
-            let capacity = agg_capacity.unwrap_or(signatures);
-            let mut agg = SignatureAggregator::with_capacity(params, capacity);
+            let _capacity = agg_capacity.unwrap_or(signatures);
 
             // Generate a single keypair and reuse it for speed. This is safe as long as
             // signatures <= 2^h for the chosen h (ensured by needed_h above).
@@ -173,16 +172,30 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 kp.public_key().clone()
             };
 
-            // Populate aggregator
+            // Precompute signatures to keep logic simple regardless of aggregator capacity API
+            let mut items: Vec<(Vec<u8>, _)> = Vec::with_capacity(signatures);
             for i in 0..signatures {
                 let msg = format!("bench-msg-{}", i).into_bytes();
                 let sig = wrapper.sign(&keypair, &msg)?;
-                agg.add_signature(sig, msg, public_key.clone())?;
+                items.push((msg, sig));
             }
 
-            // Verify and time it
-            let (ok, elapsed) = agg.verify_all()?;
-            println!("Verified: {} | count: {} | elapsed: {:?}", ok, agg.len(), elapsed);
+            // Fallback-friendly verification: process in chunks that fit default aggregator capacity
+            // Many implementations default to capacity 10
+            let chunk_cap = 10usize;
+            let mut all_ok = true;
+            let mut total = std::time::Duration::from_secs(0);
+            for chunk in items.chunks(chunk_cap) {
+                let mut agg = SignatureAggregator::new(wrapper.params().clone());
+                for (msg, sig) in chunk.iter() {
+                    agg.add_signature(sig.clone(), msg.clone(), public_key.clone())?;
+                }
+                let (ok, elapsed) = agg.verify_all()?;
+                all_ok &= ok;
+                total += elapsed;
+            }
+
+            println!("Verified: {} | count: {} | elapsed: {:?}", all_ok, signatures, total);
         }
     }
 

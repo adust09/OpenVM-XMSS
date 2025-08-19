@@ -1269,6 +1269,7 @@ dependencies = [
  "sha2",
  "shared",
  "tokio",
+ "xmss-lib",
 ]
 
 [[package]]

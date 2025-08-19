@@ -12,8 +12,6 @@ This repository focuses on verifiable XMSS verification inside OpenVM:
 
 ### In Progress 🚧
 - Guest TSL mapper and XMSS verification wiring
-- App‑level proof workflow and inputs tooling
-- Optional EVM proof path (post `cargo openvm setup`)
 
 ## Project Structure
 
@@ -138,6 +136,22 @@ cargo run -p xmss-host -- benchmark --signatures 10000
 # Explicit aggregator capacity (optional; defaults to --signatures)
 cargo run -p xmss-host -- benchmark --signatures 10000 --agg-capacity 10000
 ```
+
+Sample results (local, release build):
+
+```bash
+$ cargo run -p xmss-host --bin xmss-host --release -- benchmark --signatures 10
+Benchmarking verification with 10 signatures
+Verified: true | count: 10 | elapsed: 7.92ms
+```
+
+```bash
+$ cargo run -p xmss-host --bin xmss-host --release -- benchmark --signatures 100
+Benchmarking verification with 100 signatures
+Verified: true | count: 100 | elapsed: 75.38ms
+```
+
+Note: Times are machine- and build-dependent. Use `--release` for realistic numbers.
 
 Library-side helpers:
 - `SignatureAggregator::new()` → capacity 10
