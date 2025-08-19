@@ -1,5 +1,4 @@
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion, Throughput};
-use rand::{rngs::StdRng, RngCore, SeedableRng};
 use xmss_lib::xmss::XmssWrapper;
 
 fn bench_keygen(c: &mut Criterion) {

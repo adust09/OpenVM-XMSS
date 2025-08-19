@@ -67,7 +67,7 @@ Generate a minimal, valid single-XMSS input and run it:
 
 ```bash
 # From repo root
-cargo run -p xmss-host -- single-gen --output guest/input.json
+cargo run -p xmss-host --bin xmss-host -- single-gen --output guest/input.json
 cd guest
 cargo openvm run --input input.json   # reveals: all_valid=1, num_verified=1, stmt_commit[8 words]
 # Optional: app proof
@@ -83,13 +83,13 @@ You can drive the OpenVM workflow via the host CLI:
 
 ```bash
 # Generate a valid single-signature input
-cargo run -p xmss-host -- single-gen --output guest/input.json
+cargo run -p xmss-host --bin xmss-host -- single-gen --output guest/input.json
 
 # Produce an app proof (writes to guest/xmss-guest.app.proof and copies to proof.bin)
-cargo run -p xmss-host -- prove --input guest/input.json --output proof.bin
+cargo run -p xmss-host --bin xmss-host -- prove --input guest/input.json --output proof.bin
 
 # Verify a given app proof (copies it into guest/ then runs verify)
-cargo run -p xmss-host -- verify --proof proof.bin
+cargo run -p xmss-host --bin xmss-host -- verify --proof proof.bin
 ```
 
 Note: This expects `cargo-openvm` to be installed and keys generated (`cd guest && cargo openvm keygen`). If a command fails, the host will surface a helpful error.
@@ -105,7 +105,7 @@ Run benches for the library package:
 cargo build
 
 # Run benches (recommend --release)
-cargo bench -p xmss-lib -- --warm-up-time 1 --sample-size 30
+cargo bench -p xmss-lib --bench key_ops -- --warm-up-time 1 --sample-size 30
 
 # View HTML reports
 open target/criterion/report/index.html
@@ -128,13 +128,13 @@ Examples:
 
 ```bash
 # 1,000 signatures (h auto≈10; capacity inferred)
-cargo run -p xmss-host -- benchmark --signatures 1000
+cargo run -p xmss-host --bin xmss-host -- benchmark --signatures 1000
 
 # 10,000 signatures (h auto≈14)
-cargo run -p xmss-host -- benchmark --signatures 10000
+cargo run -p xmss-host --bin xmss-host -- benchmark --signatures 10000
 
 # Explicit aggregator capacity (optional; defaults to --signatures)
-cargo run -p xmss-host -- benchmark --signatures 10000 --agg-capacity 10000
+cargo run -p xmss-host --bin xmss-host -- benchmark --signatures 10000 --agg-capacity 10000
 ```
 
 Sample results (local, release build):
@@ -153,12 +153,47 @@ Verified: true | count: 100 | elapsed: 75.38ms
 
 Note: Times are machine- and build-dependent. Use `--release` for realistic numbers.
 
+### Benchmark Results
+
+Performance benchmarks using Criterion (30 samples with 1s warm-up):
+
+| Operation | Parameters | Time | Throughput |
+|-----------|------------|------|------------|
+| **Key Generation** | | | |
+| keygen | h=4 | 7.67 ms | - |
+| keygen | h=8 | 122.59 ms | - |
+| keygen | h=10 | 510.12 ms | - |
+| **Signing** | | | |
+| sign | h=8, m=32B | 133.75 ms | 7.48 elem/s |
+| sign | h=8, m=1KB | 124.32 ms | 8.04 elem/s |
+| sign | h=8, m=64KB | 130.39 ms | 7.67 elem/s |
+| sign | h=10, m=32B | 489.36 ms | 2.04 elem/s |
+| sign | h=10, m=1KB | 488.59 ms | 2.05 elem/s |
+| sign | h=10, m=64KB | 490.80 ms | 2.04 elem/s |
+| **Verification** | | | |
+| verify | h=8, m=32B | 996.76 µs | 1,003 elem/s |
+| verify | h=8, m=1KB | 1.19 ms | 841 elem/s |
+| verify | h=10, m=32B | 1.12 ms | 893 elem/s |
+| verify | h=10, m=1KB | 1.12 ms | 890 elem/s |
+
+*Note: h = tree height, m = message size*
+
 Library-side helpers:
 - `SignatureAggregator::new()` → capacity 10
 - `SignatureAggregator::new_100()` → capacity 100
 - `SignatureAggregator::new_1000()` → capacity 1,000
 - `SignatureAggregator::new_10000()` → capacity 10,000
 - `SignatureAggregator::with_capacity(params, n)` → custom capacity
+
+Run benches for the host package (HTML reports enabled):
+
+```bash
+# Aggregate+verify from host crate
+cargo bench -p xmss-host --bench aggregate -- --warm-up-time 1 --sample-size 30
+
+# View consolidated HTML report (covers all benches)
+open target/criterion/report/index.html
+```
 
 ## Input Format
 
