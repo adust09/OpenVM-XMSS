@@ -61,7 +61,7 @@ cargo run -p xmss-host --bin xmss-host -- single-gen --output guest/input.json
 cargo run -p xmss-host --bin xmss-host -- prove --input guest/input.json --output proof.bin
 
 # Verify a given app proof (copies it into guest/ then runs verify)
-cargo run -p xmss-host --bin xmss-host -- verify --proof proof.bin
+cargo run -p xmss-host --bin xmss-host -- benchmark-openvm verify --proof proof.bin --iterations 5
 ```
 
 Note: This expects `cargo-openvm` to be installed and keys generated (`cd guest && cargo openvm keygen`). If a command fails, the host will surface a helpful error.
@@ -89,45 +89,3 @@ cargo run -p xmss-host --bin xmss-host -- benchmark-openvm verify --proof guest/
 - `--proof` (`-p`): Proof file for verify operation
 
  automatically calculated based on signature count: `h >= log2(signatures)`
-
-### Getting Started: HTML Report
-
-You can run the three “Getting Started” steps end-to-end and emit a compact HTML report summarizing success/failure, durations, and artifact paths.
-
-```bash
-# Writes report/getting-started.html by default
-cargo run -p xmss-host --bin xmss-host -- report-getting-started \
-  --input guest/input.json \
-  --proof proof.bin \
-  --output report/getting-started.html
-
-# Open the report
-open report/getting-started.html        # macOS
-# or: xdg-open report/getting-started.html  # Linux
-```
-
-Notes:
-- This subcommand internally performs: single-gen → prove (OpenVM) → verify (OpenVM).
-- Requires `cargo-openvm` installed and guest build/keys set up (same as the individual steps).
-
-## HTML Benchmark Reports
-
-Criterion is enabled with HTML reports for both `xmss-lib` and `xmss-host` benches.
-
-- Run library benches: `cargo bench -p xmss-lib`
-- Run host benches: `cargo bench -p xmss-host`
-
-After a run, open the generated report:
-
-- Aggregate report: `target/criterion/report/index.html`
-- Per-benchmark report: `target/criterion/<group>/report/index.html` (e.g., `target/criterion/xmss_keygen/report/index.html` or `target/criterion/host_aggregate_verify/report/index.html`).
-
-Quick open examples:
-
-- macOS: `open target/criterion/report/index.html`
-- Linux: `xdg-open target/criterion/report/index.html`
-
-Notes:
-
-- `criterion` is already configured with `features = ["html_reports"]` in each crate.
-- `cargo bench` uses an optimized profile; no extra flags are needed. If you disable default features, ensure `--features html_reports` remains enabled for HTML output.

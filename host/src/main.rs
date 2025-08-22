@@ -240,17 +240,25 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 run_in_guest(["prove", "app", "--input", input_abs.to_str().unwrap()])?;
                 let guest_proof = std::path::Path::new("guest").join("xmss-guest.app.proof");
                 if !guest_proof.exists() {
-                    return Err(format!("Expected proof at {:?} but not found.", guest_proof).into());
+                    return Err(
+                        format!("Expected proof at {:?} but not found.", guest_proof).into()
+                    );
                 }
                 let out_path = PathBuf::from(&proof);
-                if let Some(parent) = out_path.parent() { std::fs::create_dir_all(parent)?; }
+                if let Some(parent) = out_path.parent() {
+                    std::fs::create_dir_all(parent)?;
+                }
                 std::fs::copy(&guest_proof, &out_path)?;
                 Ok(())
             })();
             r2.elapsed = t1.elapsed();
             match prove_res {
-                Ok(()) => { r2.ok = true; }
-                Err(e) => { r2.detail = Some(format!("{}", e)); }
+                Ok(()) => {
+                    r2.ok = true;
+                }
+                Err(e) => {
+                    r2.detail = Some(format!("{}", e));
+                }
             }
             results.push(r2);
 
@@ -266,15 +274,21 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let verify_res = (|| -> Result<(), Box<dyn Error>> {
                 let proof_abs = to_abs(&proof)?;
                 let guest_proof = std::path::Path::new("guest").join("xmss-guest.app.proof");
-                if let Some(parent) = guest_proof.parent() { std::fs::create_dir_all(parent)?; }
+                if let Some(parent) = guest_proof.parent() {
+                    std::fs::create_dir_all(parent)?;
+                }
                 std::fs::copy(&proof_abs, &guest_proof)?;
                 run_in_guest(["verify", "app"])?;
                 Ok(())
             })();
             r3.elapsed = t2.elapsed();
             match verify_res {
-                Ok(()) => { r3.ok = true; }
-                Err(e) => { r3.detail = Some(format!("{}", e)); }
+                Ok(()) => {
+                    r3.ok = true;
+                }
+                Err(e) => {
+                    r3.detail = Some(format!("{}", e));
+                }
             }
             results.push(r3);
 
@@ -287,7 +301,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
             html.push_str("<!DOCTYPE html><html><head><meta charset='utf-8'><title>Getting Started Report</title>\n");
             html.push_str("<style>body{font-family:system-ui,Arial,sans-serif;margin:24px} table{border-collapse:collapse;width:100%} th,td{border:1px solid #ddd;padding:8px} th{background:#f5f5f5;text-align:left} .ok{color:#0a7a39;font-weight:600} .fail{color:#b00020;font-weight:600}</style>");
             html.push_str("</head><body>\n");
-            html.push_str(&format!("<h1>Getting Started HTML Report</h1><p>Generated: {}</p>", html_escape(&now)));
+            html.push_str(&format!(
+                "<h1>Getting Started HTML Report</h1><p>Generated: {}</p>",
+                html_escape(&now)
+            ));
             html.push_str("<table><thead><tr><th>Step</th><th>Status</th><th>Duration</th><th>Artifact</th><th>Detail</th></tr></thead><tbody>");
             for r in &results {
                 let status = if r.ok { "OK" } else { "FAIL" };
@@ -312,7 +329,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
             html.push_str("</body></html>");
 
             let out_path = std::path::Path::new(&output);
-            if let Some(parent) = out_path.parent() { std::fs::create_dir_all(parent)?; }
+            if let Some(parent) = out_path.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
             std::fs::write(out_path, html)?;
             println!("Wrote HTML report to {}", out_path.display());
         }
