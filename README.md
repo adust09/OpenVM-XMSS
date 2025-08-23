@@ -31,7 +31,7 @@ xmss-for-ethereum/
 │   └── openvm.toml        # VM config (sha256 enabled)
 ├── shared/                # Shared, no_std types (input/output structs)
 │   └── src/lib.rs         # CompactSignature/PublicKey/Statement/Witness
-├── host/                  # Host CLI (prove/verify/single-gen) + Criterion benches
+├── host/                  # Host CLI (prove/verify) + Criterion benches
 │   ├── src/main.rs        # CLI entrypoints
 │   └── benches/           # Host-side aggregation/verify benches (HTML reports)
 └── lib/                   # XMSS helpers (CPU), Criterion benches; no standalone CLI
@@ -54,14 +54,14 @@ rustup component add rust-src --toolchain nightly-2025-02-14
 You can drive the OpenVM workflow via the host CLI:
 
 ```bash
-# Generate a valid single-signature input
-cargo run -p xmss-host --bin xmss-host -- single-gen --output guest/input.json
-
-# Produce an app proof (writes to guest/xmss-guest.app.proof)
-cargo run -p xmss-host --bin xmss-host -- prove --input guest/input.json
+# Generate proof with single signature (auto-generates input)
+cargo run -p xmss-host --bin xmss-host -- benchmark-openvm prove --signatures 1 --generate-input --iterations 1
 
 # Verify the app proof (uses guest/xmss-guest.app.proof by default)
 cargo run -p xmss-host --bin xmss-host -- verify
+
+# Alternative: Generate HTML report covering all steps
+cargo run -p xmss-host --bin xmss-host -- report-getting-started
 ```
 
 Note: This expects `cargo-openvm` to be installed and keys generated (`cd guest && cargo openvm keygen`). If a command fails, the host will surface a helpful error.
@@ -81,6 +81,5 @@ cargo run -p xmss-host --bin xmss-host -- benchmark-openvm verify --iterations 5
 - `--signatures` (`-s`): Number of signatures to generate for benchmarking (default: 1)
 - `--iterations` (`-n`): Number of benchmark iterations to run (default: 1)
 - `--generate-input`: Generate valid input JSON if missing
-- `--input` (`-i`): Input JSON path for run/prove operations (default: `guest/input.json`)
 
  automatically calculated based on signature count: `h >= log2(signatures)`

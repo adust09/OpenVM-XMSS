@@ -21,13 +21,6 @@ enum Commands {
     },
     /// Verify a proof (uses guest/xmss-guest.app.proof by default)
     Verify,
-    /// Generate a minimal, valid single-signature input JSON
-    /// tuned so the guest verifies it as valid.
-    SingleGen {
-        /// Output JSON path (OpenVM input format)
-        #[arg(short, long, default_value = "guest/input.json")]
-        output: String,
-    },
     /// Benchmark proof generation
     Benchmark {
         /// Number of signatures to verify
@@ -168,18 +161,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
             let mut results: Vec<StepRes> = Vec::new();
 
-            // Step 1: single-gen (generate input)
+            // Step 1: generate input
             let t0 = Instant::now();
             let r1 = match generate_batch_input(1, &input) {
                 Ok(()) => StepRes {
-                    name: "single-gen",
+                    name: "generate-input",
                     ok: true,
                     elapsed: t0.elapsed(),
                     detail: None,
                     artifact: Some(input.clone()),
                 },
                 Err(e) => StepRes {
-                    name: "single-gen",
+                    name: "generate-input",
                     ok: false,
                     elapsed: t0.elapsed(),
                     detail: Some(format!("{}", e)),
@@ -274,10 +267,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 ));
             }
             html.push_str("</tbody></table>");
-            html.push_str("<p>Commands performed are equivalent to:</p><pre><code>xmss-host single-gen --output ");
-            html.push_str(&html_escape(&input));
-            html.push_str("\nxmss-host prove --input ");
-            html.push_str(&html_escape(&input));
+            html.push_str("<p>Commands performed are equivalent to:</p><pre><code>xmss-host benchmark-openvm prove --signatures 1 --generate-input --iterations 1");
+            // html.push_str(&html_escape(&input));
             html.push_str("\nxmss-host verify");
             html.push_str("</code></pre>");
             html.push_str("</body></html>");
@@ -288,12 +279,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
             std::fs::write(out_path, html)?;
             println!("Wrote HTML report to {}", out_path.display());
-        }
-        Commands::SingleGen { output } => {
-            generate_batch_input(1, &output)?;
-            println!("Wrote single-signature input to {}", output);
-            println!("Next: cd guest && cargo openvm run --input {}", output);
-            println!("Guest will reveal: all_valid, count, stmt_commit (8 words)");
         }
         Commands::Benchmark { signatures, agg_capacity } => {
             use xmss_lib::xmss::{SignatureAggregator, XmssWrapper};
@@ -386,7 +371,7 @@ fn html_escape(s: &str) -> String {
     out
 }
 
-// Helpers reused by single-gen and OpenVM benchmarking
+// Helpers reused by OpenVM benchmarking
 fn write_input_json<T: serde::Serialize>(batch: &T, output: &str) -> Result<(), Box<dyn Error>> {
     // Serialize with OpenVM serde (LE u32 words) and wrap into JSON
     let words: Vec<u32> = openvm::serde::to_vec(batch).expect("serialize batch");
@@ -419,7 +404,7 @@ fn generate_batch_input(signatures: usize, output: &str) -> Result<(), Box<dyn E
     use xmss_types::{PublicKey, Signature, Statement, TslParams, VerificationBatch, Witness};
 
     // Use simple TSL parameters that work with the guest
-    // Based on the original single-gen logic but extended for multiple signatures
+    // Generate deterministic test signatures for benchmarking
     let params = TslParams {
         w: 2,
         v: 1,
