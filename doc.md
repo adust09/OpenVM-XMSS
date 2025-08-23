@@ -76,6 +76,31 @@
 - アプリ証明生成: `cargo openvm prove app --input input.json`
 - アプリ証明検証: `cargo openvm verify app`
 
+### Host ベンチマーク（大規模集約）
+- 概要: CPU 上で XMSS 署名を N 件生成→集約→検証し、経過時間を表示します。
+- 自動設定: `--signatures N` から必要な木高 `h` を自動選択（`2^h >= N`）。
+- 容量指定: 省略時はアグリゲータ容量は `N`。必要に応じて `--agg-capacity` で明示可能。
+
+例:
+
+```bash
+# 1,000 件（h は自動で ≈10）
+cargo run -p xmss-host -- benchmark --signatures 1000
+
+# 10,000 件（h は自動で ≈14）
+cargo run -p xmss-host -- benchmark --signatures 10000
+
+# 容量を明示（デフォルトは N と同じ）
+cargo run -p xmss-host -- benchmark --signatures 10000 --agg-capacity 10000
+```
+
+ライブラリ API（容量プリセット）:
+- `SignatureAggregator::new()` → 10 件
+- `SignatureAggregator::new_100()` → 100 件
+- `SignatureAggregator::new_1000()` → 1,000 件
+- `SignatureAggregator::new_10000()` → 10,000 件
+- `SignatureAggregator::with_capacity(params, n)` → 任意件数
+
 ## テスト
 - ユニットテスト
   - `tsl.rs`: 小パラメータでの DP/unranking、決定性の検証。

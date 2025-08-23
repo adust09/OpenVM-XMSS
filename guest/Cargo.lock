@@ -350,13 +350,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "shared"
-version = "0.1.0"
-dependencies = [
- "serde",
-]
-
-[[package]]
 name = "strum_macros"
 version = "0.26.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -441,7 +434,14 @@ version = "0.1.0"
 dependencies = [
  "openvm",
  "openvm-sha2",
- "shared",
+ "xmss-types",
+]
+
+[[package]]
+name = "xmss-types"
+version = "0.1.0"
+dependencies = [
+ "serde",
 ]
 
 [[package]]

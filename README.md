@@ -2,34 +2,25 @@
 
 XMSS (eXtended Merkle Signature Scheme) verification tailored for Ethereum, with an OpenVM guest program that proves batch verification using the TSL encoding scheme and accelerated SHA‑256, and binds a public statement (k, ep, m, pk_i) via a commitment revealed as public output.
 
-## Overview
+## Table of Contents
+
+- [XMSS for Ethereum](#xmss-for-ethereum)
+  - [Table of Contents](#table-of-contents)
+  - [1. Overview](#1-overview)
+  - [2. Prerequisites](#2-prerequisites)
+  - [3. Getting Started](#3-getting-started)
+  - [4. Benchmarking](#4-benchmarking)
+
+## 1. Overview
 
 This repository focuses on verifiable XMSS verification inside OpenVM:
 - Verify multiple XMSS signatures in a guest program
-- Generate application-level proofs (`cargo openvm prove app`)
+- Generate application-level proofs
 - Reveal pass/fail, count, and statement commitment as public values
+ - Aggregate and verify large batches (10, 100, 1,000, up to 10,000)
 
-### In Progress 🚧
-- Guest TSL mapper and XMSS verification wiring
-- App‑level proof workflow and inputs tooling
-- Optional EVM proof path (post `cargo openvm setup`)
 
-## Project Structure
-
-```
-xmss-for-ethereum/
-├── guest/                 # OpenVM guest (no_std)
-│   ├── src/main.rs        # Entry; reads batch input and reveals results
-│   └── openvm.toml        # VM config (sha256 enabled)
-├── shared/                # Shared, no_std types (input/output structs)
-│   └── src/lib.rs         # CompactSignature/PublicKey/Statement/Witness
-├── host/                  # Host CLI (integration hooks)
-│   └── src/main.rs        # Prove/verify scaffolding (WIP)
-└── lib/                   # XMSS helpers (CPU), no benchmarks/CLI
-    └── src/xmss/          # Wrapper/aggregator (internal use)
-```
-
-## Prerequisites
+## 2. Prerequisites
 
 Install the OpenVM CLI and toolchain (see OpenVM book):
 
@@ -39,72 +30,57 @@ rustup install nightly-2025-02-14
 rustup component add rust-src --toolchain nightly-2025-02-14
 ```
 
-## Build, Prove, Verify
-
-```bash
-# Build the OpenVM guest
-cd guest
-cargo openvm build
-
-# Generate app proving/verifying keys
-cargo openvm keygen
-
-# Provide input (OpenVM bytes format) and generate an app-level proof
-# Example: guest/input.json with { "input": ["0x01<serialized VerificationBatch>"] }
-cargo openvm prove app --input input.json
-
-# Verify the app-level proof
-cargo openvm verify app
-
-# Optional: generate/verify EVM proof after heavy setup
-# cargo openvm setup
-# cargo openvm prove evm --input guest/input.json
-# cargo openvm verify evm
-```
-
-### Quick: Single-Signature Valid Example
-
-Generate a minimal, valid single-XMSS input and run it:
-
-```bash
-# From repo root
-cargo run -p xmss-host -- single-gen --output guest/input.json
-cd guest
-cargo openvm run --input input.json   # reveals: all_valid=1, num_verified=1, stmt_commit[8 words]
-# Optional: app proof
-cargo openvm prove app --input input.json
-cargo openvm verify app
-```
-
-This uses parameters `w=2, v=1, d0=1, tree_height=0`, so the guest’s constraints are satisfied and the Merkle root equals the WOTS leaf, making a compact, verifiable single-signature case.
-
-### Host-Driven Prove/Verify
+## 3. Getting Started
 
 You can drive the OpenVM workflow via the host CLI:
 
 ```bash
-# Generate a valid single-signature input
-cargo run -p xmss-host -- single-gen --output guest/input.json
+# Generate proof with single signature (auto-generates input)
+cargo run -p xmss-host --bin xmss-host -- benchmark-openvm prove --signatures 1 --generate-input --iterations 1
 
-# Produce an app proof (writes to guest/xmss-guest.app.proof and copies to proof.bin)
-cargo run -p xmss-host -- prove --input guest/input.json --output proof.bin
+# Verify the app proof (uses guest/xmss-guest.app.proof by default)
+cargo run -p xmss-host --bin xmss-host -- verify
 
-# Verify a given app proof (copies it into guest/ then runs verify)
-cargo run -p xmss-host -- verify --proof proof.bin
 ```
 
 Note: This expects `cargo-openvm` to be installed and keys generated (`cd guest && cargo openvm keygen`). If a command fails, the host will surface a helpful error.
 
-## Input Format
+## 4. Benchmarking
 
-Inputs use OpenVM’s byte format (little‑endian, 4‑byte padding). The guest reads a single `VerificationBatch` containing:
-- `params`: TSL/XMSS parameters (`w`, `v`, `d0`, `security_bits`, `tree_height`)
-- `statement`: `Statement { k, ep, m, public_keys }`
-  - `k`: number of signatures expected
-  - `ep`: epoch (u64) mixed into the domain for TSL step derivation
-  - `m`: single common message for all signatures
-  - `public_keys`: array of `CompactPublicKey { root, seed }`
-- `witness`: `Witness { signatures }` where each is `CompactSignature`
+This repository provides OpenVM end-to-end benchmarking capabilities. Measure OpenVM execution times for `prove app` / `verify app` from the host. The CLI also reports peak memory (RSS of child processes) after each iteration.
 
-Place serialized bytes in `guest/input.json` as `{ "input": ["0x01<hex>"] }`.
-The guest reveals: `all_valid`, `num_verified`, and `stmt_commit` (8 little-endian u32 words).
+```bash
+# prove app with 100 signatures
+cargo run -p xmss-host --bin xmss-host -- benchmark-openvm prove --signatures 100 --generate-input --iterations 1
+
+# verify app: measure proof verification (uses guest/xmss-guest.app.proof by default)
+cargo run -p xmss-host --bin xmss-host -- benchmark-openvm verify --iterations 5
+```
+
+- `--signatures` (`-s`): Number of signatures to generate for benchmarking (default: 1)
+- `--iterations` (`-n`): Number of benchmark iterations to run (default: 1)
+- `--generate-input`: Generate valid input JSON if missing
+
+
+ automatically calculated based on signature count: `h >= log2(signatures)`
+
+Environment: aarch64-apple-darwin (macOS), Rust nightly-2025-02-14, OpenVM toolchain per prerequisites.
+
+Commands run:
+
+```
+cargo run -p xmss-host --bin xmss-host -- benchmark-openvm prove --signatures 100 --generate-input --iterations 3
+cargo run -p xmss-host --bin xmss-host -- benchmark-openvm verify --iterations 3
+```
+
+Results (wall-clock and memory):
+
+| Operation | Signatures | Wall-clock (avg) | Peak RSS      |
+|-----------|------------|------------------|---------------|
+| Prove     | 100        | 28.17 s          | 2.63 GiB      |
+| Verify    | 100        | 0.881 s          | 16.81 MiB     |
+| Prove     | 1000       | 444.29 s         | 5.30 GiB      |
+| Verify    | 1000       | 1.522 s          | 18.64 MiB     |
+
+Notes:
+- Timings include OpenVM build/transpile work invoked by `cargo openvm`. With warm caches or build skipping, prove times may drop.

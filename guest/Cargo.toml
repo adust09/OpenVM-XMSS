@@ -7,5 +7,5 @@ edition = "2021"
 
 [dependencies]
 openvm = { git = "https://github.com/openvm-org/openvm.git", default-features = false }
-shared = { path = "../shared", default-features = false }
+xmss-types = { path = "../xmss-types", default-features = false }
 openvm-sha2 = { git = "https://github.com/openvm-org/openvm.git" }

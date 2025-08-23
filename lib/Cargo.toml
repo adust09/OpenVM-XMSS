@@ -11,3 +11,17 @@ license = "MIT"
 hypercube-signatures = { workspace = true }
 
 [dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+rand = "0.8"
+
+[[bench]]
+name = "key_ops"
+harness = false
+
+[[bench]]
+name = "aggregate"
+harness = false
+
+[[bench]]
+name = "serialize"
+harness = false

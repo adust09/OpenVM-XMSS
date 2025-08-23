@@ -1,9 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use shared::{
-    CompactPublicKey, CompactSignature, Statement, TslParams, VerificationBatch, Witness,
-};
+use xmss_types::{PublicKey, Signature, Statement, TslParams, VerificationBatch, Witness};
 
 fn to_hex(bytes: &[u8]) -> String {
     const HEX: &[u8; 16] = b"0123456789abcdef";
@@ -19,13 +17,13 @@ fn main() {
     // Small params, 1 fake signature guaranteed to fail
     let params = TslParams { w: 4, v: 4, d0: 4, security_bits: 128, tree_height: 0 };
 
-    let sig = CompactSignature {
+    let sig = Signature {
         leaf_index: 0,
         randomness: [0u8; 32],
         wots_signature: vec![[0u8; 32]; params.v as usize],
         auth_path: vec![],
     };
-    let pk = CompactPublicKey { root: [1u8; 32], seed: [2u8; 32] };
+    let pk = PublicKey { root: [1u8; 32], seed: [2u8; 32] };
 
     let statement = Statement { k: 1, ep: 0, m: b"test message".to_vec(), public_keys: vec![pk] };
     let witness = Witness { signatures: vec![sig] };

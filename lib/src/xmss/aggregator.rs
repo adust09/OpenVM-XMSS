@@ -8,16 +8,38 @@ pub struct SignatureAggregator {
     messages: Vec<Vec<u8>>,
     public_keys: Vec<XMSSPublicKey>,
     params: XMSSParams,
+    max_signatures: usize,
 }
 
 impl SignatureAggregator {
-    /// Create a new signature aggregator
+    /// Create a new signature aggregator with default capacity (10)
     pub fn new(params: XMSSParams) -> Self {
+        Self::with_capacity(params, 10)
+    }
+
+    /// Create a new signature aggregator with capacity for up to 100 signatures
+    pub fn new_100(params: XMSSParams) -> Self {
+        Self::with_capacity(params, 100)
+    }
+
+    /// Create a new signature aggregator with capacity for up to 1000 signatures
+    pub fn new_1000(params: XMSSParams) -> Self {
+        Self::with_capacity(params, 1000)
+    }
+
+    /// Create a new signature aggregator with capacity for up to 10,000 signatures
+    pub fn new_10000(params: XMSSParams) -> Self {
+        Self::with_capacity(params, 10_000)
+    }
+
+    /// Create a new signature aggregator with a custom capacity
+    pub fn with_capacity(params: XMSSParams, max_signatures: usize) -> Self {
         Self {
-            signatures: Vec::with_capacity(10), // Pre-allocate for 10 signatures
-            messages: Vec::with_capacity(10),
-            public_keys: Vec::with_capacity(10),
+            signatures: Vec::with_capacity(max_signatures),
+            messages: Vec::with_capacity(max_signatures),
+            public_keys: Vec::with_capacity(max_signatures),
             params,
+            max_signatures,
         }
     }
 
@@ -28,8 +50,10 @@ impl SignatureAggregator {
         message: Vec<u8>,
         public_key: XMSSPublicKey,
     ) -> Result<(), Box<dyn Error>> {
-        if self.signatures.len() >= 10 {
-            return Err("Aggregator is full (max 10 signatures)".into());
+        if self.signatures.len() >= self.max_signatures {
+            return Err(
+                format!("Aggregator is full (max {} signatures)", self.max_signatures).into()
+            );
         }
 
         self.signatures.push(signature);
