@@ -37,12 +37,12 @@ enum Commands {
         #[arg(long)]
         agg_capacity: Option<usize>,
     },
-    /// Benchmark OpenVM end-to-end wall-clock time for run/prove/verify
+    /// Benchmark OpenVM end-to-end wall-clock time for prove/verify
     BenchmarkOpenvm {
-        /// Operation to benchmark: run | prove | verify
+        /// Operation to benchmark: prove | verify
         #[arg(value_enum)]
         op: OvOp,
-        /// Input JSON path for run/prove (auto-generated if missing with --generate-input)
+        /// Input JSON path for prove (auto-generated if missing with --generate-input)
         #[arg(short, long, default_value = "guest/input.json")]
         input: String,
         /// Number of iterations to run
@@ -68,7 +68,6 @@ enum Commands {
 
 #[derive(Copy, Clone, Debug, ValueEnum)]
 enum OvOp {
-    Run,
     Prove,
     Verify,
 }
@@ -111,7 +110,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         Commands::BenchmarkOpenvm { op, input, iterations, generate_input, signatures } => {
             use std::time::Instant;
             // Ensure input exists if needed
-            if matches!(op, OvOp::Run | OvOp::Prove) {
+            if matches!(op, OvOp::Prove) {
                 let inp_path = Path::new(&input);
                 if generate_input || !inp_path.exists() {
                     println!(
@@ -126,14 +125,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let mut total = std::time::Duration::ZERO;
             for i in 0..iterations {
                 match op {
-                    OvOp::Run => {
-                        let input_abs = to_abs(&input)?;
-                        let t0 = Instant::now();
-                        run_in_guest(["run", "--input", input_abs.to_str().unwrap()])?;
-                        let dt = t0.elapsed();
-                        println!("[{}] OpenVM run elapsed: {:?}", i + 1, dt);
-                        total += dt;
-                    }
                     OvOp::Prove => {
                         let input_abs = to_abs(&input)?;
                         let t0 = Instant::now();

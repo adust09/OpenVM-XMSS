@@ -68,12 +68,9 @@ Note: This expects `cargo-openvm` to be installed and keys generated (`cd guest 
 
 ## 5. Benchmarking
 
-This repository provides OpenVM end-to-end benchmarking capabilities. Measure OpenVM execution times for `run` / `prove app` / `verify app` from the host. This focuses on wall-clock time of the OpenVM CLI, not CPU-only signature verification.
+This repository provides OpenVM end-to-end benchmarking capabilities. Measure OpenVM execution times for `prove app` / `verify app` from the host. This focuses on wall-clock time of the OpenVM CLI, not CPU-only signature verification.
 
 ```bash
-# run with 100 signatures for more realistic benchmarking
-cargo run -p xmss-host --bin xmss-host -- benchmark-openvm run --signatures 100 --generate-input --iterations 3
-
 # prove app with 100 signatures
 cargo run -p xmss-host --bin xmss-host -- benchmark-openvm prove --signatures 100 --generate-input --iterations 1
 
