@@ -3,19 +3,6 @@ use std::error::Error;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-mod util {
-    pub fn to_hex_prefixed(bytes: &[u8]) -> String {
-        const HEX: &[u8; 16] = b"0123456789abcdef";
-        let mut out = String::with_capacity(2 + bytes.len() * 2);
-        out.push_str("0x");
-        for &b in bytes {
-            out.push(HEX[(b >> 4) as usize] as char);
-            out.push(HEX[(b & 0x0f) as usize] as char);
-        }
-        out
-    }
-}
-
 #[derive(Parser)]
 #[command(name = "xmss-host")]
 #[command(about = "XMSS zkVM proof generation and verification")]
@@ -31,16 +18,9 @@ enum Commands {
         /// Input file containing signatures
         #[arg(short, long)]
         input: String,
-        /// Output file for the proof
-        #[arg(short, long)]
-        output: String,
     },
-    /// Verify a proof
-    Verify {
-        /// Proof file to verify
-        #[arg(short, long)]
-        proof: String,
-    },
+    /// Verify a proof (uses guest/xmss-guest.app.proof by default)
+    Verify,
     /// Generate a minimal, valid single-signature input JSON
     /// tuned so the guest verifies it as valid.
     SingleGen {
@@ -65,9 +45,6 @@ enum Commands {
         /// Input JSON path for run/prove (auto-generated if missing with --generate-input)
         #[arg(short, long, default_value = "guest/input.json")]
         input: String,
-        /// Proof file for verify (if provided, copied into guest/ before verifying)
-        #[arg(short, long)]
-        proof: Option<String>,
         /// Number of iterations to run
         #[arg(short = 'n', long, default_value_t = 1)]
         iterations: usize,
@@ -86,9 +63,6 @@ enum Commands {
         /// Input JSON path for guest
         #[arg(short, long, default_value = "guest/input.json")]
         input: String,
-        /// Proof file path to export and verify
-        #[arg(short, long, default_value = "proof.bin")]
-        proof: String,
     },
 }
 
@@ -104,12 +78,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Prove { input, output } => {
+        Commands::Prove { input } => {
             println!("Generating OpenVM app proof using {}", input);
             let input_abs = to_abs(&input)?;
             run_in_guest(["prove", "app", "--input", input_abs.to_str().unwrap()])?;
-
-            // Copy proof out to requested location
+            
             let guest_proof = Path::new("guest").join("xmss-guest.app.proof");
             if !guest_proof.exists() {
                 return Err(format!(
@@ -118,26 +91,24 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 )
                 .into());
             }
-            let out_path = PathBuf::from(output);
-            if let Some(parent) = out_path.parent() {
-                std::fs::create_dir_all(parent)?;
-            }
-            std::fs::copy(&guest_proof, &out_path)?;
-            println!("Proof saved to {}", out_path.display());
+            println!("Proof generated at {}", guest_proof.display());
         }
-        Commands::Verify { proof } => {
-            println!("Verifying app proof {} via OpenVM", proof);
-            // Place the proof where OpenVM expects by default
-            let proof_abs = to_abs(&proof)?;
+        Commands::Verify => {
             let guest_proof = Path::new("guest").join("xmss-guest.app.proof");
-            if let Some(parent) = guest_proof.parent() {
-                std::fs::create_dir_all(parent)?;
+            println!("Verifying app proof at {}", guest_proof.display());
+            
+            if !guest_proof.exists() {
+                return Err(format!(
+                    "Proof file not found at {:?}. Please run 'prove' command first.",
+                    guest_proof
+                )
+                .into());
             }
-            std::fs::copy(&proof_abs, &guest_proof)?;
+            
             run_in_guest(["verify", "app"])?;
             println!("Proof verified successfully");
         }
-        Commands::BenchmarkOpenvm { op, input, proof, iterations, generate_input, signatures } => {
+        Commands::BenchmarkOpenvm { op, input, iterations, generate_input, signatures } => {
             use std::time::Instant;
             // Ensure input exists if needed
             if matches!(op, OvOp::Run | OvOp::Prove) {
@@ -172,15 +143,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         total += dt;
                     }
                     OvOp::Verify => {
-                        // If a proof path is given, copy it into guest expected location
-                        if let Some(p) = &proof {
-                            let proof_abs = to_abs(p)?;
-                            let guest_proof = Path::new("guest").join("xmss-guest.app.proof");
-                            if let Some(parent) = guest_proof.parent() {
-                                std::fs::create_dir_all(parent)?;
-                            }
-                            std::fs::copy(&proof_abs, &guest_proof)?;
+                        // Always use the default proof location
+                        let guest_proof = Path::new("guest").join("xmss-guest.app.proof");
+                        if !guest_proof.exists() {
+                            return Err(format!(
+                                "Proof file not found at {:?}. Please run 'prove' first.",
+                                guest_proof
+                            ).into());
                         }
+                        
                         let t0 = Instant::now();
                         run_in_guest(["verify", "app"])?;
                         let dt = t0.elapsed();
@@ -193,7 +164,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 println!("Average over {} iters: {:?}", iterations, total / (iterations as u32));
             }
         }
-        Commands::ReportGettingStarted { output, input, proof } => {
+        Commands::ReportGettingStarted { output, input } => {
             use std::time::Instant;
 
             struct StepRes {
@@ -233,7 +204,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 ok: false,
                 elapsed: std::time::Duration::ZERO,
                 detail: None,
-                artifact: Some(proof.clone()),
+                artifact: Some("guest/xmss-guest.app.proof".to_string()),
             };
             let prove_res = (|| -> Result<(), Box<dyn Error>> {
                 let input_abs = to_abs(&input)?;
@@ -244,11 +215,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         format!("Expected proof at {:?} but not found.", guest_proof).into()
                     );
                 }
-                let out_path = PathBuf::from(&proof);
-                if let Some(parent) = out_path.parent() {
-                    std::fs::create_dir_all(parent)?;
-                }
-                std::fs::copy(&guest_proof, &out_path)?;
                 Ok(())
             })();
             r2.elapsed = t1.elapsed();
@@ -269,15 +235,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 ok: false,
                 elapsed: std::time::Duration::ZERO,
                 detail: None,
-                artifact: Some(proof.clone()),
+                artifact: Some("guest/xmss-guest.app.proof".to_string()),
             };
             let verify_res = (|| -> Result<(), Box<dyn Error>> {
-                let proof_abs = to_abs(&proof)?;
                 let guest_proof = std::path::Path::new("guest").join("xmss-guest.app.proof");
-                if let Some(parent) = guest_proof.parent() {
-                    std::fs::create_dir_all(parent)?;
+                if !guest_proof.exists() {
+                    return Err(
+                        format!("Proof file not found at {:?}. Please run 'prove' first.", guest_proof).into()
+                    );
                 }
-                std::fs::copy(&proof_abs, &guest_proof)?;
                 run_in_guest(["verify", "app"])?;
                 Ok(())
             })();
@@ -321,10 +287,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             html.push_str(&html_escape(&input));
             html.push_str("\nxmss-host prove --input ");
             html.push_str(&html_escape(&input));
-            html.push_str(" --output ");
-            html.push_str(&html_escape(&proof));
-            html.push_str("\nxmss-host verify --proof ");
-            html.push_str(&html_escape(&proof));
+            html.push_str("\nxmss-host verify");
             html.push_str("</code></pre>");
             html.push_str("</body></html>");
 

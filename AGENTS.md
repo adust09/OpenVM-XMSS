@@ -13,7 +13,7 @@
 ## Build, Test, and Development Commands
 - Build workspace: `cargo build` (builds `lib`, `host`, `shared`).
 - Run library CLI: `cargo run -p xmss-lib -- benchmark --signatures 10`.
-- Run host CLI: `cargo run -p xmss-host -- prove --input in.json --output proof.bin`.
+- Run host CLI: `cargo run -p xmss-host --bin xmss-host -- prove --input in.json`.
 - Build guest separately: `cd guest && cargo build`.
 - Benchmarks: `cargo bench -p xmss-lib`.
 - Tests: `cargo test` or package-specific: `cargo test -p xmss-lib`.
