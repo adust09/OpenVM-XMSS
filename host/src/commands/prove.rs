@@ -1,5 +1,5 @@
 use crate::commands::CommandResult;
-use crate::utils::{openvm::run_in_guest, to_abs};
+use crate::utils::{mem::children_maxrss_bytes, openvm::run_in_guest, to_abs};
 use std::path::Path;
 
 pub fn handle_prove(input: String) -> CommandResult {
@@ -16,5 +16,11 @@ pub fn handle_prove(input: String) -> CommandResult {
         .into());
     }
     println!("Proof generated at {}", guest_proof.display());
+
+    if let Some(bytes) = children_maxrss_bytes() {
+        println!("Peak memory (children, RSS): {}", crate::utils::mem::fmt_bytes(bytes));
+    } else {
+        println!("Peak memory: unavailable on this platform");
+    }
     Ok(())
 }

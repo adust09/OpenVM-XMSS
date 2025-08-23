@@ -6,8 +6,7 @@ pub fn handle_benchmark(signatures: usize, agg_capacity: Option<usize>) -> Comma
 
     // Choose the minimal tree height h such that 2^h >= signatures.
     // Clamp to at least h=2.
-    let needed_h =
-        ((signatures.max(1) - 1).next_power_of_two().trailing_zeros() as usize).max(2);
+    let needed_h = ((signatures.max(1) - 1).next_power_of_two().trailing_zeros() as usize).max(2);
     let wrapper = XmssWrapper::with_params(needed_h, 128)?;
     let params = wrapper.params().clone();
 

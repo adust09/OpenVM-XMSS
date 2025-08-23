@@ -69,9 +69,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
         Commands::BenchmarkOpenvm { op, input, iterations, generate_input, signatures } => {
             handle_benchmark_openvm(op, input, iterations, generate_input, signatures)?
         }
-        Commands::Benchmark { signatures, agg_capacity } => handle_benchmark(signatures, agg_capacity)?,
+        Commands::Benchmark { signatures, agg_capacity } => {
+            handle_benchmark(signatures, agg_capacity)?
+        }
     }
 
     Ok(())
 }
-

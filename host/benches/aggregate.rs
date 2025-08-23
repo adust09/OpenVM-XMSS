@@ -51,4 +51,3 @@ fn bench_host_aggregate_verify(c: &mut Criterion) {
 
 criterion_group!(benches, bench_host_aggregate_verify);
 criterion_main!(benches);
-

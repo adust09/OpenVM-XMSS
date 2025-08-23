@@ -1,5 +1,5 @@
 use crate::commands::CommandResult;
-use crate::utils::openvm::run_in_guest;
+use crate::utils::{mem::children_maxrss_bytes, openvm::run_in_guest};
 use std::path::Path;
 
 pub fn handle_verify() -> CommandResult {
@@ -16,5 +16,10 @@ pub fn handle_verify() -> CommandResult {
 
     run_in_guest(["verify", "app"])?;
     println!("Proof verified successfully");
+    if let Some(bytes) = children_maxrss_bytes() {
+        println!("Peak memory (children, RSS): {}", crate::utils::mem::fmt_bytes(bytes));
+    } else {
+        println!("Peak memory: unavailable on this platform");
+    }
     Ok(())
 }
