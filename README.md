@@ -87,11 +87,8 @@ cargo run -p xmss-host --bin xmss-host -- benchmark-openvm verify --iterations 5
 Generate an HTML analysis report of your current setup:
 
 ```bash
-# Generate report with default paths
+# Generate analysis report (saved to report/analysis.html)
 cargo run -p xmss-host --bin xmss-host -- report
-
-# Custom output location
-cargo run -p xmss-host --bin xmss-host -- report --output my-analysis.html
 ```
 
 The report analyzes:

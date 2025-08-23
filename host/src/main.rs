@@ -52,17 +52,7 @@ enum Commands {
         signatures: usize,
     },
     /// Generate an analysis report of existing files and system status
-    Report {
-        /// Output HTML report path
-        #[arg(short, long, default_value = "report/analysis.html")]
-        output: String,
-        /// Input JSON path to analyze
-        #[arg(short, long, default_value = "guest/input.json")]
-        input: String,
-        /// Proof file path to analyze
-        #[arg(short, long, default_value = "guest/xmss-guest.app.proof")]
-        proof: String,
-    },
+    Report,
 }
 
 #[derive(Copy, Clone, Debug, ValueEnum)]
@@ -81,7 +71,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         Commands::BenchmarkOpenvm { op, input, iterations, generate_input, signatures } => {
             handle_benchmark_openvm(op, input, iterations, generate_input, signatures)?
         }
-        Commands::Report { output, input, proof } => handle_report(output, input, proof)?,
+        Commands::Report => handle_report()?,
         Commands::Benchmark { signatures, agg_capacity } => handle_benchmark(signatures, agg_capacity)?,
     }
 

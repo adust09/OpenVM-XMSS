@@ -11,7 +11,10 @@ struct FileInfo {
     detail: String,
 }
 
-pub fn handle_report(output: String, input: String, proof: String) -> CommandResult {
+pub fn handle_report() -> CommandResult {
+    let output = "report/analysis.html".to_string();
+    let input = "guest/input.json".to_string();
+    let proof = "guest/xmss-guest.app.proof".to_string();
     let mut files = Vec::new();
 
     // Analyze input JSON
