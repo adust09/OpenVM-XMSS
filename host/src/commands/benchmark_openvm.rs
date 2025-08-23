@@ -1,5 +1,10 @@
 use crate::commands::CommandResult;
-use crate::utils::{input::generate_batch_input, openvm::run_in_guest, to_abs};
+use crate::utils::{
+    input::generate_batch_input,
+    mem::{children_maxrss_bytes, fmt_bytes},
+    openvm::run_in_guest,
+    to_abs,
+};
 use crate::OvOp;
 use std::path::Path;
 use std::time::Instant;
@@ -33,6 +38,9 @@ pub fn handle_benchmark_openvm(
                 run_in_guest(["prove", "app", "--input", input_abs.to_str().unwrap()])?;
                 let dt = t0.elapsed();
                 println!("[{}] OpenVM prove(app) elapsed: {:?}", i + 1, dt);
+                if let Some(bytes) = children_maxrss_bytes() {
+                    println!("[{}] Peak memory (children, RSS): {}", i + 1, fmt_bytes(bytes));
+                }
                 total += dt;
             }
             OvOp::Verify => {
@@ -50,12 +58,20 @@ pub fn handle_benchmark_openvm(
                 run_in_guest(["verify", "app"])?;
                 let dt = t0.elapsed();
                 println!("[{}] OpenVM verify(app) elapsed: {:?}", i + 1, dt);
+                if let Some(bytes) = children_maxrss_bytes() {
+                    println!("[{}] Peak memory (children, RSS): {}", i + 1, fmt_bytes(bytes));
+                }
                 total += dt;
             }
         }
     }
     if iterations > 1 {
         println!("Average over {} iters: {:?}", iterations, total / (iterations as u32));
+    }
+    if let Some(bytes) = children_maxrss_bytes() {
+        println!("Final peak memory (children, RSS): {}", fmt_bytes(bytes));
+    } else {
+        println!("Peak memory: unavailable on this platform");
     }
     Ok(())
 }
