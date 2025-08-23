@@ -1,4 +1,4 @@
-# XMSS for Ethereum
+# OpenVM-XMSS
 
 XMSS (eXtended Merkle Signature Scheme) verification tailored for Ethereum, with an OpenVM guest program that proves batch verification using the TSL encoding scheme and accelerated SHA‑256, and binds a public statement (k, ep, m, pk_i) via a commitment revealed as public output.
 
