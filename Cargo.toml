@@ -1,5 +1,5 @@
 [workspace]
-members = ["host", "shared", "lib"]
+members = ["host", "xmss-types", "lib"]
 exclude = ["guest"]
 resolver = "2"
 

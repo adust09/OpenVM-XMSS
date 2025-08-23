@@ -3,7 +3,7 @@ use std::fs;
 use std::process::{Command, Stdio};
 
 use sha2::{Digest, Sha256};
-use shared::{Statement, VerificationBatch};
+use xmss_types::{Statement, VerificationBatch};
 
 fn parse_output_words(s: &str) -> Option<[u32; 10]> {
     // Expect a line like: Execution output: [..N bytes..]

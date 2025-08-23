@@ -5,7 +5,7 @@ openvm::entry!(main);
 
 fn main() {
     use openvm::io::{read, reveal_u32};
-    use shared::VerificationBatch;
+    use xmss_types::VerificationBatch;
 
     let batch: VerificationBatch = read();
 

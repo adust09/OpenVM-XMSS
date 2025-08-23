@@ -462,9 +462,7 @@ fn write_input_json<T: serde::Serialize>(batch: &T, output: &str) -> Result<(), 
 
 fn generate_batch_input(signatures: usize, output: &str) -> Result<(), Box<dyn Error>> {
     use sha2::{Digest, Sha256};
-    use shared::{
-        CompactPublicKey, CompactSignature, Statement, TslParams, VerificationBatch, Witness,
-    };
+    use xmss_types::{PublicKey, Signature, Statement, TslParams, VerificationBatch, Witness};
 
     // Use simple TSL parameters that work with the guest
     // Based on the original single-gen logic but extended for multiple signatures
@@ -494,14 +492,14 @@ fn generate_batch_input(signatures: usize, output: &str) -> Result<(), Box<dyn E
         let mut root = [0u8; 32];
         root.copy_from_slice(&leaf_hash);
 
-        let sig = CompactSignature {
+        let sig = Signature {
             leaf_index: i as u32,
             randomness: [0u8; 32],
             wots_signature: vec![sig_elem],
             auth_path: vec![],
         };
 
-        let pk = CompactPublicKey { root, seed: [0u8; 32] };
+        let pk = PublicKey { root, seed: [0u8; 32] };
 
         signatures_vec.push(sig);
         public_keys_vec.push(pk);

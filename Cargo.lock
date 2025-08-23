@@ -910,13 +910,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "shared"
-version = "0.1.0"
-dependencies = [
- "serde",
-]
-
-[[package]]
 name = "signal-hook-registry"
 version = "1.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1269,9 +1262,9 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
- "shared",
  "tokio",
  "xmss-lib",
+ "xmss-types",
 ]
 
 [[package]]
@@ -1281,6 +1274,13 @@ dependencies = [
  "criterion",
  "hypercube-signatures",
  "rand",
+]
+
+[[package]]
+name = "xmss-types"
+version = "0.1.0"
+dependencies = [
+ "serde",
 ]
 
 [[package]]

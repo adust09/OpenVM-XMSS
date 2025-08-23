@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 openvm = { workspace = true }
-shared = { path = "../shared" }
+xmss-types = { path = "../xmss-types" }
 xmss-lib = { path = "../lib" }
 clap = { version = "4.0", features = ["derive"] }
 tokio = { version = "1.0", features = ["full"] }

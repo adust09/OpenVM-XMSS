@@ -4,7 +4,7 @@ extern crate alloc;
 
 use alloc::{vec, vec::Vec};
 use core::cmp::min;
-use shared::TslParams;
+use xmss_types::TslParams;
 
 use crate::hash::hash_message_randomness;
 

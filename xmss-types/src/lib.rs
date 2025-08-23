@@ -8,7 +8,7 @@ extern crate alloc;
 use alloc::vec::Vec;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CompactSignature {
+pub struct Signature {
     pub leaf_index: u32,
     pub randomness: [u8; 32],
     pub wots_signature: Vec<[u8; 32]>,
@@ -16,7 +16,7 @@ pub struct CompactSignature {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CompactPublicKey {
+pub struct PublicKey {
     pub root: [u8; 32],
     pub seed: [u8; 32],
 }
@@ -31,12 +31,12 @@ pub struct Statement {
     // Single common message for all signatures
     pub m: Vec<u8>,
     // Public keys corresponding to each signature
-    pub public_keys: Vec<CompactPublicKey>,
+    pub public_keys: Vec<PublicKey>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Witness {
-    pub signatures: Vec<CompactSignature>,
+    pub signatures: Vec<Signature>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

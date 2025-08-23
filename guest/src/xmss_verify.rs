@@ -1,9 +1,9 @@
 extern crate alloc;
 use alloc::vec::Vec;
-use shared::{VerificationBatch, CompactSignature, CompactPublicKey, TslParams};
+use xmss_types::{VerificationBatch, Signature, PublicKey, TslParams};
 use crate::tsl::encode_vertex;
 use crate::hash::{set_sha256_bytes};
-use shared::Statement;
+use xmss_types::Statement;
 use crate::hash::sha256_bytes;
 
 pub fn verify_batch(batch: &VerificationBatch) -> (bool, u32) {
@@ -25,9 +25,9 @@ pub fn verify_batch(batch: &VerificationBatch) -> (bool, u32) {
     (all_valid, count)
 }
 
-fn verify_one_stub(sig: &CompactSignature, msg: &[u8], _ep: u64, pk: &CompactPublicKey) -> bool { verify_one_fallback(sig, msg, pk) }
+fn verify_one_stub(sig: &Signature, msg: &[u8], _ep: u64, pk: &PublicKey) -> bool { verify_one_fallback(sig, msg, pk) }
 
-pub fn verify_one(params: &TslParams, sig: &CompactSignature, msg: &[u8], ep: u64, pk: &CompactPublicKey) -> bool {
+pub fn verify_one(params: &TslParams, sig: &Signature, msg: &[u8], ep: u64, pk: &PublicKey) -> bool {
     if params.w <= 1 || params.v == 0 { return false; }
     if sig.wots_signature.len() != params.v as usize { return false; }
     if sig.auth_path.len() != params.tree_height as usize { return false; }
@@ -85,7 +85,7 @@ fn merkle_root_from_path(mut leaf: [u8;32], leaf_index: u64, auth_path: &[[u8;32
     leaf
 }
 
-fn verify_one_fallback(_sig: &CompactSignature, _msg: &[u8], _pk: &CompactPublicKey) -> bool { true }
+fn verify_one_fallback(_sig: &Signature, _msg: &[u8], _pk: &PublicKey) -> bool { true }
 
 pub fn statement_commitment(stmt: &Statement) -> [u8; 32] {
     // Deterministic encoding: k||ep||len(m)||m||len(pks)||each(root||seed)
@@ -110,7 +110,7 @@ mod tests {
     use super::*;
     use openvm_sha2::set_sha256;
     use std::vec;
-    use shared::{Statement, CompactPublicKey};
+    use xmss_types::{Statement, PublicKey};
 
     #[test]
     fn merkle_root_two_levels() {
@@ -154,7 +154,7 @@ mod tests {
             k: 1,
             ep: 0,
             m: b"single".to_vec(),
-            public_keys: vec![CompactPublicKey { root: [0u8;32], seed: [0u8;32] }],
+            public_keys: vec![PublicKey { root: [0u8;32], seed: [0u8;32] }],
         };
         let got = statement_commitment(&stmt);
 
