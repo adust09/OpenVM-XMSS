@@ -1,8 +1,6 @@
 use std::error::Error;
 use std::path::PathBuf;
 
-pub mod html;
-pub mod input;
 pub mod openvm;
 
 pub fn to_abs(p: &str) -> Result<PathBuf, Box<dyn Error>> {

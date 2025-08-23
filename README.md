@@ -60,8 +60,6 @@ cargo run -p xmss-host --bin xmss-host -- benchmark-openvm prove --signatures 1 
 # Verify the app proof (uses guest/xmss-guest.app.proof by default)
 cargo run -p xmss-host --bin xmss-host -- verify
 
-# Generate analysis report of current system status
-cargo run -p xmss-host --bin xmss-host -- report
 ```
 
 Note: This expects `cargo-openvm` to be installed and keys generated (`cd guest && cargo openvm keygen`). If a command fails, the host will surface a helpful error.
@@ -82,19 +80,5 @@ cargo run -p xmss-host --bin xmss-host -- benchmark-openvm verify --iterations 5
 - `--iterations` (`-n`): Number of benchmark iterations to run (default: 1)
 - `--generate-input`: Generate valid input JSON if missing
 
-### Analysis Report
-
-Generate an HTML analysis report of your current setup:
-
-```bash
-# Generate analysis report (saved to report/analysis.html)
-cargo run -p xmss-host --bin xmss-host -- report
-```
-
-The report analyzes:
-- Input JSON file status and content
-- Proof file availability and metadata  
-- OpenVM CLI and key generation status
-- Recommended next steps based on current state
 
  automatically calculated based on signature count: `h >= log2(signatures)`

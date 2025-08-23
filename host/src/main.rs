@@ -51,8 +51,6 @@ enum Commands {
         #[arg(short, long, default_value_t = 1)]
         signatures: usize,
     },
-    /// Generate an analysis report of existing files and system status
-    Report,
 }
 
 #[derive(Copy, Clone, Debug, ValueEnum)]
@@ -71,7 +69,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         Commands::BenchmarkOpenvm { op, input, iterations, generate_input, signatures } => {
             handle_benchmark_openvm(op, input, iterations, generate_input, signatures)?
         }
-        Commands::Report => handle_report()?,
         Commands::Benchmark { signatures, agg_capacity } => handle_benchmark(signatures, agg_capacity)?,
     }
 
