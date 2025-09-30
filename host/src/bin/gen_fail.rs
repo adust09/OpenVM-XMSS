@@ -15,7 +15,13 @@ fn to_hex(bytes: &[u8]) -> String {
 
 fn main() {
     // Small params, 1 fake signature guaranteed to fail
-    let params = TslParams { w: 4, v: 4, d0: 4, security_bits: 128, tree_height: 0 };
+    let params = TslParams {
+        w: 4,
+        v: 4,
+        d0: 4,
+        security_bits: 128,
+        tree_height: 0,
+    };
 
     let sig = Signature {
         leaf_index: 0,
@@ -23,11 +29,25 @@ fn main() {
         wots_signature: vec![[0u8; 32]; params.v as usize],
         auth_path: vec![],
     };
-    let pk = PublicKey { root: [1u8; 32], seed: [2u8; 32] };
+    let pk = PublicKey {
+        root: [1u8; 32],
+        seed: [2u8; 32],
+    };
 
-    let statement = Statement { k: 1, ep: 0, m: b"test message".to_vec(), public_keys: vec![pk] };
-    let witness = Witness { signatures: vec![sig] };
-    let batch = VerificationBatch { params, statement, witness };
+    let statement = Statement {
+        k: 1,
+        ep: 0,
+        m: b"test message".to_vec(),
+        public_keys: vec![pk],
+    };
+    let witness = Witness {
+        signatures: vec![sig],
+    };
+    let batch = VerificationBatch {
+        params,
+        statement,
+        witness,
+    };
 
     // Serialize to OpenVM words -> bytes -> hex
     let words: Vec<u32> = openvm::serde::to_vec(&batch).expect("serialize batch");

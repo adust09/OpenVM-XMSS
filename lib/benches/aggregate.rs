@@ -33,7 +33,8 @@ fn bench_aggregate_verify(c: &mut Criterion) {
                         for chunk in items.chunks(10) {
                             let mut agg = SignatureAggregator::new(chunk[0].3.clone());
                             for (msg, sig, pk, _) in chunk.iter() {
-                                agg.add_signature(sig.clone(), msg.clone(), pk.clone()).unwrap();
+                                agg.add_signature(sig.clone(), msg.clone(), pk.clone())
+                                    .unwrap();
                             }
                             let (ok, _elapsed) = agg.verify_all().unwrap();
                             all_ok &= ok;

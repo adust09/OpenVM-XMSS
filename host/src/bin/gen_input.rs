@@ -15,10 +15,25 @@ fn to_hex(bytes: &[u8]) -> String {
 
 fn main() {
     // Minimal empty batch: no signatures/keys, empty message
-    let params = TslParams { w: 4, v: 4, d0: 4, security_bits: 128, tree_height: 0 };
-    let statement = Statement { k: 0, ep: 0, m: vec![], public_keys: vec![] };
+    let params = TslParams {
+        w: 4,
+        v: 4,
+        d0: 4,
+        security_bits: 128,
+        tree_height: 0,
+    };
+    let statement = Statement {
+        k: 0,
+        ep: 0,
+        m: vec![],
+        public_keys: vec![],
+    };
     let witness = Witness { signatures: vec![] };
-    let batch = VerificationBatch { params, statement, witness };
+    let batch = VerificationBatch {
+        params,
+        statement,
+        witness,
+    };
 
     // Serialize using OpenVM serde
     let words: Vec<u32> = openvm::serde::to_vec(&batch).expect("serialize batch");

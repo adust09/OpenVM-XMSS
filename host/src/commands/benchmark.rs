@@ -44,6 +44,9 @@ pub fn handle_benchmark(signatures: usize, agg_capacity: Option<usize>) -> Comma
         total += elapsed;
     }
 
-    println!("Verified: {} | count: {} | elapsed: {:?}", all_ok, signatures, total);
+    println!(
+        "Verified: {} | count: {} | elapsed: {:?}",
+        all_ok, signatures, total
+    );
     Ok(())
 }

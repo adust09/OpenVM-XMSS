@@ -4,12 +4,14 @@ XMSS (eXtended Merkle Signature Scheme) verification tailored for Ethereum, with
 
 ## Table of Contents
 
-- [XMSS for Ethereum](#xmss-for-ethereum)
+- [OpenVM-XMSS](#openvm-xmss)
   - [Table of Contents](#table-of-contents)
   - [1. Overview](#1-overview)
   - [2. Prerequisites](#2-prerequisites)
   - [3. Getting Started](#3-getting-started)
   - [4. Benchmarking](#4-benchmarking)
+    - [Results (CPU, M1 Macbook 16GB):](#results-cpu-m1-macbook-16gb)
+    - [Results (GPU, RTX5090):](#results-gpu-rtx5090)
 
 ## 1. Overview
 
@@ -35,11 +37,19 @@ rustup component add rust-src --toolchain nightly-2025-02-14
 You can drive the OpenVM workflow via the host CLI:
 
 ```bash
+# Build the guest once (optional)
+cd guest
+cargo openvm build --release
+cd ..
+
 # Generate proof with single signature (auto-generates input)
-cargo run -p xmss-host --bin xmss-host -- benchmark-openvm prove --signatures 1 --generate-input --iterations 1
+OPENVM_GUEST_FEATURES=cuda \
+  cargo run -p xmss-host --bin xmss-host -- benchmark-openvm prove \
+  --signatures 1 --generate-input --iterations 1
 
 # Verify the app proof (uses guest/xmss-guest.app.proof by default)
-cargo run -p xmss-host --bin xmss-host -- verify
+OPENVM_GUEST_FEATURES=cuda \
+  cargo run -p xmss-host --bin xmss-host -- verify
 
 ```
 
@@ -64,7 +74,7 @@ cargo run -p xmss-host --bin xmss-host -- benchmark-openvm verify --iterations 5
 
  automatically calculated based on signature count: `h >= log2(signatures)`
 
-Environment: aarch64-apple-darwin (macOS), Rust nightly-2025-02-14, OpenVM toolchain per prerequisites.
+Environment (CPU baseline): aarch64-apple-darwin (macOS), Rust nightly-2025-02-14, OpenVM toolchain per prerequisites.
 
 Commands run:
 
@@ -73,7 +83,7 @@ cargo run -p xmss-host --bin xmss-host -- benchmark-openvm prove --signatures 10
 cargo run -p xmss-host --bin xmss-host -- benchmark-openvm verify --iterations 3
 ```
 
-Results (wall-clock and memory):
+### Results (CPU, M1 Macbook 16GB):
 
 | Operation | Signatures | Wall-clock (avg) | Peak RSS      |
 |-----------|------------|------------------|---------------|
@@ -81,6 +91,36 @@ Results (wall-clock and memory):
 | Verify    | 100        | 0.881 s          | 16.81 MiB     |
 | Prove     | 1000       | 444.29 s         | 5.30 GiB      |
 | Verify    | 1000       | 1.522 s          | 18.64 MiB     |
+
+Environment (GPU): Ubuntu 24.04.2 (RTX 5090, driver 570.158.01, CUDA 12.9.86), Rust nightly-2025-02-14, `cargo-openvm` v1.4.0 (built with `--features cuda`).
+
+Commands run:
+
+```
+OPENVM_GUEST_FEATURES=cuda cargo run -p xmss-host --bin xmss-host -- benchmark-openvm prove \
+  --signatures <N> --generate-input --iterations 1
+OPENVM_GUEST_FEATURES=cuda cargo run -p xmss-host --bin xmss-host -- verify
+```
+
+Run the prove command once per signature count (`N ∈ {1, 100, 500, 1000}`) and reuse
+the generated proof for verification.
+
+### Results (GPU, RTX5090):
+
+| Operation | Signatures | Wall-clock (avg) | Peak RSS      |
+|-----------|------------|------------------|---------------|
+| Prove     | 100        | 18.42 s          | 3.67 GiB      |
+| Verify    | 100        | ~0.05 s          | 25.81 MiB     |
+| Prove     | 500        | 68.58 s          | 12.50 GiB     |
+| Verify    | 500        | ~0.05 s          | 25.66 MiB     |
+| Prove     | 1000       | 139.72 s         | 19.12 GiB     |
+| Verify    | 1000       | ~0.05 s          | 25.82 MiB     |
+
+Verification runs were issued via
+`OPENVM_GUEST_FEATURES=cuda cargo run -p xmss-host --bin xmss-host -- verify`.
+*Single-run wall clock from the CLI output; use
+`OPENVM_GUEST_FEATURES=cuda cargo run -p xmss-host --bin xmss-host -- benchmark-openvm verify`
+for averaged latency measurements.
 
 Notes:
 - Timings include OpenVM build/transpile work invoked by `cargo openvm`. With warm caches or build skipping, prove times may drop.

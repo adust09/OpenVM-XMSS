@@ -34,7 +34,10 @@ fn parse_json_input_to_batch(json_path: &str) -> VerificationBatch {
     // Read JSON and extract single hex string
     let s = fs::read_to_string(json_path).expect("read input.json");
     let v: serde_json::Value = serde_json::from_str(&s).expect("parse json");
-    let arr = v.get("input").and_then(|x| x.as_array()).expect("input array");
+    let arr = v
+        .get("input")
+        .and_then(|x| x.as_array())
+        .expect("input array");
     let hex_str = arr.first().and_then(|x| x.as_str()).expect("hex string");
     let hex = hex_str.strip_prefix("0x").unwrap_or(hex_str);
     // Hex -> bytes

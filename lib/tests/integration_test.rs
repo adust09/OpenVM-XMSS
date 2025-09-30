@@ -3,7 +3,9 @@ use xmss_lib::xmss::{SignatureAggregator, XmssWrapper};
 #[test]
 fn test_single_signature_verification() {
     let wrapper = XmssWrapper::new().expect("Failed to create wrapper");
-    let keypair = wrapper.generate_keypair().expect("Failed to generate keypair");
+    let keypair = wrapper
+        .generate_keypair()
+        .expect("Failed to generate keypair");
 
     let message = b"Hello, XMSS!";
     let signature = wrapper.sign(&keypair, message).expect("Failed to sign");
@@ -13,7 +15,9 @@ fn test_single_signature_verification() {
         kp.public_key().clone()
     };
 
-    let is_valid = wrapper.verify(&public_key, message, &signature).expect("Failed to verify");
+    let is_valid = wrapper
+        .verify(&public_key, message, &signature)
+        .expect("Failed to verify");
 
     assert!(is_valid, "Signature verification failed");
 }
@@ -27,7 +31,9 @@ fn test_multiple_signatures_aggregation() {
 
     // Generate and add 3 signatures (reduced from 5)
     for i in 0..3 {
-        let keypair = wrapper.generate_keypair().expect("Failed to generate keypair");
+        let keypair = wrapper
+            .generate_keypair()
+            .expect("Failed to generate keypair");
         let message = format!("Message {}", i).into_bytes();
         let signature = wrapper.sign(&keypair, &message).expect("Failed to sign");
 
@@ -36,7 +42,9 @@ fn test_multiple_signatures_aggregation() {
             kp.public_key().clone()
         };
 
-        aggregator.add_signature(signature, message, public_key).expect("Failed to add signature");
+        aggregator
+            .add_signature(signature, message, public_key)
+            .expect("Failed to add signature");
     }
 
     assert_eq!(aggregator.len(), 3);
@@ -49,8 +57,12 @@ fn test_multiple_signatures_aggregation() {
 #[test]
 fn test_invalid_signature_detection() {
     let wrapper = XmssWrapper::new().expect("Failed to create wrapper");
-    let keypair1 = wrapper.generate_keypair().expect("Failed to generate keypair 1");
-    let keypair2 = wrapper.generate_keypair().expect("Failed to generate keypair 2");
+    let keypair1 = wrapper
+        .generate_keypair()
+        .expect("Failed to generate keypair 1");
+    let keypair2 = wrapper
+        .generate_keypair()
+        .expect("Failed to generate keypair 2");
 
     let message = b"Test message";
 
@@ -63,8 +75,9 @@ fn test_invalid_signature_detection() {
         kp.public_key().clone()
     };
 
-    let is_valid =
-        wrapper.verify(&wrong_public_key, message, &signature).expect("Failed to verify");
+    let is_valid = wrapper
+        .verify(&wrong_public_key, message, &signature)
+        .expect("Failed to verify");
 
     assert!(!is_valid, "Invalid signature was accepted");
 }
@@ -78,7 +91,9 @@ fn test_aggregator_capacity() {
     let mut aggregator = SignatureAggregator::new(params);
 
     // Generate one keypair and reuse it
-    let keypair = wrapper.generate_keypair().expect("Failed to generate keypair");
+    let keypair = wrapper
+        .generate_keypair()
+        .expect("Failed to generate keypair");
     let public_key = {
         let kp = keypair.lock().unwrap();
         kp.public_key().clone()
@@ -99,7 +114,10 @@ fn test_aggregator_capacity() {
     let signature = wrapper.sign(&keypair, message).expect("Failed to sign");
 
     let result = aggregator.add_signature(signature, message.to_vec(), public_key);
-    assert!(result.is_err(), "Aggregator accepted more than 10 signatures");
+    assert!(
+        result.is_err(),
+        "Aggregator accepted more than 10 signatures"
+    );
 }
 
 #[test]
@@ -110,7 +128,9 @@ fn test_serialization_for_proof() {
     let mut aggregator = SignatureAggregator::new(params);
 
     // Generate one keypair and reuse it for speed
-    let keypair = wrapper.generate_keypair().expect("Failed to generate keypair");
+    let keypair = wrapper
+        .generate_keypair()
+        .expect("Failed to generate keypair");
     let public_key = {
         let kp = keypair.lock().unwrap();
         kp.public_key().clone()
@@ -126,7 +146,9 @@ fn test_serialization_for_proof() {
             .expect("Failed to add signature");
     }
 
-    let serialized = aggregator.serialize_for_proof().expect("Failed to serialize");
+    let serialized = aggregator
+        .serialize_for_proof()
+        .expect("Failed to serialize");
 
     // Check that serialization produced data
     assert!(!serialized.is_empty(), "Serialization produced empty data");
