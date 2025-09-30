@@ -2,17 +2,6 @@
 
 XMSS (eXtended Merkle Signature Scheme) verification tailored for Ethereum, with an OpenVM guest program that proves batch verification using the TSL encoding scheme and accelerated SHA‑256, and binds a public statement (k, ep, m, pk_i) via a commitment revealed as public output.
 
-## Table of Contents
-
-- [OpenVM-XMSS](#openvm-xmss)
-  - [Table of Contents](#table-of-contents)
-  - [1. Overview](#1-overview)
-  - [2. Prerequisites](#2-prerequisites)
-  - [3. Getting Started](#3-getting-started)
-  - [4. Benchmarking](#4-benchmarking)
-    - [Results (CPU, M1 Macbook 16GB):](#results-cpu-m1-macbook-16gb)
-    - [Results (GPU, RTX5090):](#results-gpu-rtx5090)
-
 ## 1. Overview
 
 This repository focuses on verifiable XMSS verification inside OpenVM:
@@ -71,19 +60,15 @@ cargo run -p xmss-host --bin xmss-host -- benchmark-openvm verify --iterations 5
 - `--iterations` (`-n`): Number of benchmark iterations to run (default: 1)
 - `--generate-input`: Generate valid input JSON if missing
 
+automatically calculated based on signature count: `h >= log2(signatures)`
+Run the prove command once per signature count (`N ∈ {1, 100, 500, 1000}`) and reuse the generated proof for verification.
 
- automatically calculated based on signature count: `h >= log2(signatures)`
+Notes:
+- Timings include OpenVM build/transpile work invoked by `cargo openvm`. With warm caches or build skipping, prove times may drop.
+
+### CPU Results:
 
 Environment (CPU baseline): aarch64-apple-darwin (macOS), Rust nightly-2025-02-14, OpenVM toolchain per prerequisites.
-
-Commands run:
-
-```
-cargo run -p xmss-host --bin xmss-host -- benchmark-openvm prove --signatures 100 --generate-input --iterations 3
-cargo run -p xmss-host --bin xmss-host -- benchmark-openvm verify --iterations 3
-```
-
-### Results (CPU, M1 Macbook 16GB):
 
 | Operation | Signatures | Wall-clock (avg) | Peak RSS      |
 |-----------|------------|------------------|---------------|
@@ -92,20 +77,16 @@ cargo run -p xmss-host --bin xmss-host -- benchmark-openvm verify --iterations 3
 | Prove     | 1000       | 444.29 s         | 5.30 GiB      |
 | Verify    | 1000       | 1.522 s          | 18.64 MiB     |
 
-Environment (GPU): Ubuntu 24.04.2 (RTX 5090, driver 570.158.01, CUDA 12.9.86), Rust nightly-2025-02-14, `cargo-openvm` v1.4.0 (built with `--features cuda`).
-
 Commands run:
 
 ```
-OPENVM_GUEST_FEATURES=cuda cargo run -p xmss-host --bin xmss-host -- benchmark-openvm prove \
-  --signatures <N> --generate-input --iterations 1
-OPENVM_GUEST_FEATURES=cuda cargo run -p xmss-host --bin xmss-host -- verify
+cargo run -p xmss-host --bin xmss-host -- benchmark-openvm prove --signatures 100 --generate-input --iterations 3
+cargo run -p xmss-host --bin xmss-host -- benchmark-openvm verify --iterations 3
 ```
 
-Run the prove command once per signature count (`N ∈ {1, 100, 500, 1000}`) and reuse
-the generated proof for verification.
+### GPU Results:
 
-### Results (GPU, RTX5090):
+Environment (GPU): Ubuntu 24.04.2 (RTX 5090, driver 570.158.01, CUDA 12.9.86), Rust nightly-2025-02-14, `cargo-openvm` v1.4.0 (built with `--features cuda`).
 
 | Operation | Signatures | Wall-clock (avg) | Peak RSS      |
 |-----------|------------|------------------|---------------|
@@ -116,11 +97,10 @@ the generated proof for verification.
 | Prove     | 1000       | 139.72 s         | 19.12 GiB     |
 | Verify    | 1000       | ~0.05 s          | 25.82 MiB     |
 
-Verification runs were issued via
-`OPENVM_GUEST_FEATURES=cuda cargo run -p xmss-host --bin xmss-host -- verify`.
-*Single-run wall clock from the CLI output; use
-`OPENVM_GUEST_FEATURES=cuda cargo run -p xmss-host --bin xmss-host -- benchmark-openvm verify`
-for averaged latency measurements.
+Commands run:
 
-Notes:
-- Timings include OpenVM build/transpile work invoked by `cargo openvm`. With warm caches or build skipping, prove times may drop.
+```
+OPENVM_GUEST_FEATURES=cuda cargo run -p xmss-host --bin xmss-host -- benchmark-openvm prove \
+  --signatures <N> --generate-input --iterations 1
+OPENVM_GUEST_FEATURES=cuda cargo run -p xmss-host --bin xmss-host -- verify
+```
