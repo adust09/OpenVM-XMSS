@@ -66,12 +66,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
     match cli.command {
         Commands::Prove { input } => handle_prove(input)?,
         Commands::Verify => handle_verify()?,
-        Commands::BenchmarkOpenvm { op, input, iterations, generate_input, signatures } => {
-            handle_benchmark_openvm(op, input, iterations, generate_input, signatures)?
-        }
-        Commands::Benchmark { signatures, agg_capacity } => {
-            handle_benchmark(signatures, agg_capacity)?
-        }
+        Commands::BenchmarkOpenvm {
+            op,
+            input,
+            iterations,
+            generate_input,
+            signatures,
+        } => handle_benchmark_openvm(op, input, iterations, generate_input, signatures)?,
+        Commands::Benchmark {
+            signatures,
+            agg_capacity,
+        } => handle_benchmark(signatures, agg_capacity)?,
     }
 
     Ok(())

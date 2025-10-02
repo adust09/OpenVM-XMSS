@@ -18,7 +18,13 @@ fn to_hex(bytes: &[u8]) -> String {
 /// This creates structurally valid, dummy signatures/keys suitable for benchmarking.
 pub fn generate_batch_input(signatures: usize, out_path: &str) -> Result<(), Box<dyn Error>> {
     // Keep parameters small but valid; tree_height = 0 keeps auth_path empty.
-    let params = TslParams { w: 4, v: 4, d0: 4, security_bits: 128, tree_height: 0 };
+    let params = TslParams {
+        w: 4,
+        v: 4,
+        d0: 4,
+        security_bits: 128,
+        tree_height: 0,
+    };
 
     // Dummy public keys and signatures matching params.
     let mut pks = Vec::with_capacity(signatures);
@@ -40,10 +46,18 @@ pub fn generate_batch_input(signatures: usize, out_path: &str) -> Result<(), Box
         });
     }
 
-    let statement =
-        Statement { k: signatures as u32, ep: 0, m: b"bench".to_vec(), public_keys: pks };
+    let statement = Statement {
+        k: signatures as u32,
+        ep: 0,
+        m: b"bench".to_vec(),
+        public_keys: pks,
+    };
     let witness = Witness { signatures: sigs };
-    let batch = VerificationBatch { params, statement, witness };
+    let batch = VerificationBatch {
+        params,
+        statement,
+        witness,
+    };
 
     // Serialize to OpenVM words -> bytes -> 0x-prefixed hex (with 0x01 prefix marker)
     let words: Vec<u32> = openvm::serde::to_vec(&batch)?;

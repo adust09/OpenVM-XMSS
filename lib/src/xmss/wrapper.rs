@@ -35,7 +35,9 @@ impl XmssWrapper {
         keypair: &Mutex<XMSSKeypair>,
         message: &[u8],
     ) -> Result<XMSSSignature, Box<dyn Error>> {
-        let mut kp = keypair.lock().map_err(|e| format!("Failed to lock keypair: {}", e))?;
+        let mut kp = keypair
+            .lock()
+            .map_err(|e| format!("Failed to lock keypair: {}", e))?;
         Ok(kp.sign(message))
     }
 

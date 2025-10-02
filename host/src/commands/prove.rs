@@ -18,7 +18,10 @@ pub fn handle_prove(input: String) -> CommandResult {
     println!("Proof generated at {}", guest_proof.display());
 
     if let Some(bytes) = children_maxrss_bytes() {
-        println!("Peak memory (children, RSS): {}", crate::utils::mem::fmt_bytes(bytes));
+        println!(
+            "Peak memory (children, RSS): {}",
+            crate::utils::mem::fmt_bytes(bytes)
+        );
     } else {
         println!("Peak memory: unavailable on this platform");
     }

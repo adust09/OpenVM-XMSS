@@ -2,15 +2,6 @@
 
 XMSS (eXtended Merkle Signature Scheme) verification tailored for Ethereum, with an OpenVM guest program that proves batch verification using the TSL encoding scheme and accelerated SHA‑256, and binds a public statement (k, ep, m, pk_i) via a commitment revealed as public output.
 
-## Table of Contents
-
-- [XMSS for Ethereum](#xmss-for-ethereum)
-  - [Table of Contents](#table-of-contents)
-  - [1. Overview](#1-overview)
-  - [2. Prerequisites](#2-prerequisites)
-  - [3. Getting Started](#3-getting-started)
-  - [4. Benchmarking](#4-benchmarking)
-
 ## 1. Overview
 
 This repository focuses on verifiable XMSS verification inside OpenVM:
@@ -35,11 +26,19 @@ rustup component add rust-src --toolchain nightly-2025-02-14
 You can drive the OpenVM workflow via the host CLI:
 
 ```bash
+# Build the guest once (optional)
+cd guest
+cargo openvm build --release
+cd ..
+
 # Generate proof with single signature (auto-generates input)
-cargo run -p xmss-host --bin xmss-host -- benchmark-openvm prove --signatures 1 --generate-input --iterations 1
+OPENVM_GUEST_FEATURES=cuda \
+  cargo run -p xmss-host --bin xmss-host -- benchmark-openvm prove \
+  --signatures 1 --generate-input --iterations 1
 
 # Verify the app proof (uses guest/xmss-guest.app.proof by default)
-cargo run -p xmss-host --bin xmss-host -- verify
+OPENVM_GUEST_FEATURES=cuda \
+  cargo run -p xmss-host --bin xmss-host -- verify
 
 ```
 
@@ -61,19 +60,15 @@ cargo run -p xmss-host --bin xmss-host -- benchmark-openvm verify --iterations 5
 - `--iterations` (`-n`): Number of benchmark iterations to run (default: 1)
 - `--generate-input`: Generate valid input JSON if missing
 
+automatically calculated based on signature count: `h >= log2(signatures)`
+Run the prove command once per signature count (`N ∈ {1, 100, 500, 1000}`) and reuse the generated proof for verification.
 
- automatically calculated based on signature count: `h >= log2(signatures)`
+Notes:
+- Timings include OpenVM build/transpile work invoked by `cargo openvm`. With warm caches or build skipping, prove times may drop.
 
-Environment: aarch64-apple-darwin (macOS), Rust nightly-2025-02-14, OpenVM toolchain per prerequisites.
+### CPU Results:
 
-Commands run:
-
-```
-cargo run -p xmss-host --bin xmss-host -- benchmark-openvm prove --signatures 100 --generate-input --iterations 3
-cargo run -p xmss-host --bin xmss-host -- benchmark-openvm verify --iterations 3
-```
-
-Results (wall-clock and memory):
+Environment (CPU baseline): aarch64-apple-darwin (macOS), Rust nightly-2025-02-14, OpenVM toolchain per prerequisites.
 
 | Operation | Signatures | Wall-clock (avg) | Peak RSS      |
 |-----------|------------|------------------|---------------|
@@ -82,5 +77,30 @@ Results (wall-clock and memory):
 | Prove     | 1000       | 444.29 s         | 5.30 GiB      |
 | Verify    | 1000       | 1.522 s          | 18.64 MiB     |
 
-Notes:
-- Timings include OpenVM build/transpile work invoked by `cargo openvm`. With warm caches or build skipping, prove times may drop.
+Commands run:
+
+```
+cargo run -p xmss-host --bin xmss-host -- benchmark-openvm prove --signatures 100 --generate-input --iterations 3
+cargo run -p xmss-host --bin xmss-host -- benchmark-openvm verify --iterations 3
+```
+
+### GPU Results:
+
+Environment (GPU): Ubuntu 24.04.2 (RTX 5090, driver 570.158.01, CUDA 12.9.86), Rust nightly-2025-02-14, `cargo-openvm` v1.4.0 (built with `--features cuda`).
+
+| Operation | Signatures | Wall-clock (avg) | Peak RSS      |
+|-----------|------------|------------------|---------------|
+| Prove     | 100        | 18.42 s          | 3.67 GiB      |
+| Verify    | 100        | ~0.05 s          | 25.81 MiB     |
+| Prove     | 500        | 68.58 s          | 12.50 GiB     |
+| Verify    | 500        | ~0.05 s          | 25.66 MiB     |
+| Prove     | 1000       | 139.72 s         | 19.12 GiB     |
+| Verify    | 1000       | ~0.05 s          | 25.82 MiB     |
+
+Commands run:
+
+```
+OPENVM_GUEST_FEATURES=cuda cargo run -p xmss-host --bin xmss-host -- benchmark-openvm prove \
+  --signatures <N> --generate-input --iterations 1
+OPENVM_GUEST_FEATURES=cuda cargo run -p xmss-host --bin xmss-host -- verify
+```

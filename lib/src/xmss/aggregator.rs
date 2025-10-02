@@ -51,9 +51,11 @@ impl SignatureAggregator {
         public_key: XMSSPublicKey,
     ) -> Result<(), Box<dyn Error>> {
         if self.signatures.len() >= self.max_signatures {
-            return Err(
-                format!("Aggregator is full (max {} signatures)", self.max_signatures).into()
-            );
+            return Err(format!(
+                "Aggregator is full (max {} signatures)",
+                self.max_signatures
+            )
+            .into());
         }
 
         self.signatures.push(signature);

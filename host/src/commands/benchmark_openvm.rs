@@ -39,7 +39,11 @@ pub fn handle_benchmark_openvm(
                 let dt = t0.elapsed();
                 println!("[{}] OpenVM prove(app) elapsed: {:?}", i + 1, dt);
                 if let Some(bytes) = children_maxrss_bytes() {
-                    println!("[{}] Peak memory (children, RSS): {}", i + 1, fmt_bytes(bytes));
+                    println!(
+                        "[{}] Peak memory (children, RSS): {}",
+                        i + 1,
+                        fmt_bytes(bytes)
+                    );
                 }
                 total += dt;
             }
@@ -59,14 +63,22 @@ pub fn handle_benchmark_openvm(
                 let dt = t0.elapsed();
                 println!("[{}] OpenVM verify(app) elapsed: {:?}", i + 1, dt);
                 if let Some(bytes) = children_maxrss_bytes() {
-                    println!("[{}] Peak memory (children, RSS): {}", i + 1, fmt_bytes(bytes));
+                    println!(
+                        "[{}] Peak memory (children, RSS): {}",
+                        i + 1,
+                        fmt_bytes(bytes)
+                    );
                 }
                 total += dt;
             }
         }
     }
     if iterations > 1 {
-        println!("Average over {} iters: {:?}", iterations, total / (iterations as u32));
+        println!(
+            "Average over {} iters: {:?}",
+            iterations,
+            total / (iterations as u32)
+        );
     }
     if let Some(bytes) = children_maxrss_bytes() {
         println!("Final peak memory (children, RSS): {}", fmt_bytes(bytes));
