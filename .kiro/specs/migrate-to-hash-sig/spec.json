@@ -1,0 +1,31 @@
+{
+  "feature_name": "migrate-to-hash-sig",
+  "created_at": "2025-10-02T13:42:18Z",
+  "updated_at": "2025-10-02T17:00:00Z",
+  "language": "en",
+  "phase": "tasks-generated",
+  "approvals": {
+    "requirements": {
+      "generated": true,
+      "approved": true
+    },
+    "design": {
+      "generated": true,
+      "approved": true,
+      "approved_at": "2025-10-02T16:30:00Z",
+      "notes": "Design approved with key decisions: (1) Option A for type conversion - redefine xmss-types to match hash-sig semantics, (2) Option 1 for hash functions - use SHA3 as-is, defer SHA-256 optimization. Investigation completed confirming feasibility."
+    },
+    "tasks": {
+      "generated": true,
+      "approved": false
+    }
+  },
+  "ready_for_implementation": false,
+  "design_decisions": {
+    "type_conversion_strategy": "Option A - Redefine xmss-types",
+    "hash_function": "Option 1 - Use SHA3 as-is",
+    "concrete_instantiation": "SIGWinternitzLifetime10W4",
+    "rust_version": "1.87+",
+    "message_length": "32 bytes (fixed)"
+  }
+}
