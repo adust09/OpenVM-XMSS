@@ -2,6 +2,7 @@
 name = "xmss-lib"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.87"
 authors = ["XMSS for Ethereum Team"]
 description = "XMSS signature aggregation library"
 license = "MIT"

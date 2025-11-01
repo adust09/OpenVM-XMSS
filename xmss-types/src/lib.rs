@@ -10,15 +10,15 @@ use alloc::vec::Vec;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Signature {
     pub leaf_index: u32,
-    pub randomness: Vec<u8>,  // Variable length to accommodate different hash-sig instantiations
-    pub wots_chain_ends: Vec<Vec<u8>>,  // Renamed from wots_signature to reflect chain end semantics
-    pub auth_path: Vec<Vec<u8>>,  // Variable length for different hash sizes
+    pub randomness: Vec<u8>, // Variable length to accommodate different hash-sig instantiations
+    pub wots_chain_ends: Vec<Vec<u8>>, // Renamed from wots_signature to reflect chain end semantics
+    pub auth_path: Vec<Vec<u8>>, // Variable length for different hash sizes
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PublicKey {
-    pub root: Vec<u8>,  // Variable length for different hash sizes (e.g., 25 bytes for hash-sig)
-    pub parameter: Vec<u8>,  // Renamed from seed to match hash-sig semantics
+    pub root: Vec<u8>, // Variable length for different hash sizes (e.g., 25 bytes for hash-sig)
+    pub parameter: Vec<u8>, // Renamed from seed to match hash-sig semantics
 }
 
 // Statement/Witness separation to align with pqSNARK.md

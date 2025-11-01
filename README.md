@@ -13,10 +13,11 @@ This repository focuses on verifiable XMSS verification inside OpenVM:
 
 ## 2. Prerequisites
 
-Install the OpenVM CLI and toolchain (see OpenVM book):
+Install the OpenVM CLI and toolchain (see OpenVM book). This project now targets Rust 1.87 or newer, so make sure the stable toolchain is installed locally:
 
 ```bash
-cargo +1.85 install --locked --git https://github.com/openvm-org/openvm.git --tag v1.3.0 cargo-openvm
+rustup install 1.87.0
+cargo +1.87.0 install --locked --git https://github.com/openvm-org/openvm.git --tag v1.3.0 cargo-openvm
 rustup install nightly-2025-02-14
 rustup component add rust-src --toolchain nightly-2025-02-14
 ```
