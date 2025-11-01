@@ -30,18 +30,18 @@ pub fn generate_batch_input(signatures: usize, out_path: &str) -> Result<(), Box
     let mut pks = Vec::with_capacity(signatures);
     let mut sigs = Vec::with_capacity(signatures);
     for i in 0..signatures {
-        let mut root = [0u8; 32];
-        let mut seed = [0u8; 32];
+        let mut root = vec![0u8; 32];
+        let mut parameter = vec![0u8; 32];
         root[0] = (i & 0xff) as u8;
-        seed[1] = ((i >> 1) & 0xff) as u8;
-        pks.push(PublicKey { root, seed });
+        parameter[1] = ((i >> 1) & 0xff) as u8;
+        pks.push(PublicKey { root, parameter });
 
-        let mut randomness = [0u8; 32];
+        let mut randomness = vec![0u8; 32];
         randomness[2] = (i & 0xff) as u8;
         sigs.push(Signature {
             leaf_index: 0,
             randomness,
-            wots_signature: vec![[0u8; 32]; params.v as usize],
+            wots_chain_ends: vec![vec![0u8; 32]; params.v as usize],
             auth_path: vec![],
         });
     }
