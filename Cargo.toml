@@ -4,6 +4,6 @@ exclude = ["guest"]
 resolver = "2"
 
 [workspace.dependencies]
-openvm = { git = "https://github.com/openvm-org/openvm.git", features = ["std"], default-features = false ,tag = "v1.4.0"}
+openvm = { git = "https://github.com/openvm-org/openvm.git", features = ["std"], default-features = false ,tag = "v1.4.1"}
 serde = { version = "1.0", features = ["derive"], default-features = false }
 hypercube-signatures = { git = "https://github.com/adust09/hypercube" }
