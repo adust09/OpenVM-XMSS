@@ -54,10 +54,19 @@ OpenVM-XMSS is a zero-knowledge proof system for verifying XMSS (eXtended Merkle
 
 ## Recent Evolution
 
-### Migration to hash-sig Library
-The project recently migrated from a custom XMSS implementation (hypercube-signatures) to the `hash-sig` library, providing:
+### Migration to hash-sig Library (In Progress)
+The project is migrating from a custom XMSS implementation to the `hash-sig` library (https://github.com/b-wagn/hash-sig.git), providing:
 - More robust and maintained XMSS implementation
 - Better compliance with XMSS standards
 - Conversion layer for seamless integration with OpenVM
 
+**Current Status**: Migration planning and API investigation phase. Key considerations include:
+- Adapting to 32-byte fixed message length requirement
+- Implementing epoch management wrapper
+- Redesigning data models for host/guest compatibility
+- Updating verification logic in guest program
+
 This architectural decision reflects commitment to leveraging established cryptographic libraries while maintaining high-performance zkVM integration.
+
+### Rust 1.87 Upgrade
+Recent updates upgraded the project to target Rust 1.87 or newer, ensuring compatibility with the latest stable toolchain and modern language features.

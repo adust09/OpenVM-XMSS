@@ -15,6 +15,7 @@ OpenVM-XMSS/
 │   └── commands/          # Custom slash commands
 ├── Cargo.toml             # Workspace root
 ├── Cargo.lock             # Dependency lock file
+├── rust-toolchain.toml    # Rust toolchain version pinning (1.87.0)
 ├── README.md              # User-facing documentation
 └── AGENTS.md              # Development guidelines
 
@@ -207,6 +208,7 @@ harness = false
 
 ### Configuration Files
 - **Cargo**: `Cargo.toml` (per-package) and `Cargo.lock` (workspace root)
+- **Rust Toolchain**: `rust-toolchain.toml` (enforces Rust 1.87.0 with rustfmt and clippy)
 - **OpenVM**: `openvm.toml` (guest configuration)
 - **Git**: `.gitignore` (workspace root)
 

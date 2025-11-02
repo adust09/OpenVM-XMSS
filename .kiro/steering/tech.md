@@ -19,7 +19,7 @@ The system uses OpenVM as the underlying zkVM framework, which provides:
 ### Rust Ecosystem
 - **Language Version**: Rust 2021 edition
 - **Toolchain**:
-  - Stable: `rustc 1.85` for host/library
+  - Stable: `rustc 1.87` or newer for host/library
   - Nightly: `nightly-2025-02-14` for guest (required for `no_std` builds)
 - **Build System**: Cargo with workspace management
 - **Formatter**: `cargo fmt` (4-space indentation)
@@ -95,8 +95,8 @@ rand = "0.8"  # Test data generation
 
 1. **Rust Toolchains**
 ```bash
-# Stable for workspace
-rustup install stable
+# Stable for workspace (1.87 or newer)
+rustup install 1.87.0
 
 # Nightly for guest builds
 rustup install nightly-2025-02-14
@@ -105,7 +105,7 @@ rustup component add rust-src --toolchain nightly-2025-02-14
 
 2. **OpenVM CLI**
 ```bash
-cargo +1.85 install --locked --git https://github.com/openvm-org/openvm.git \
+cargo +1.87.0 install --locked --git https://github.com/openvm-org/openvm.git \
   --tag v1.3.0 cargo-openvm
 ```
 
