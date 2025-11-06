@@ -1,7 +1,10 @@
 use std::fs;
 use std::path::PathBuf;
 
-use xmss_types::{Statement, TslParams, VerificationBatch, Witness};
+#[path = "../shared_types.rs"]
+mod shared_types;
+
+use shared_types::{Statement, TslParams, VerificationBatch, Witness};
 
 fn to_hex(bytes: &[u8]) -> String {
     const HEX: &[u8; 16] = b"0123456789abcdef";

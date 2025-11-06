@@ -2,7 +2,12 @@ use std::error::Error;
 use std::fs;
 use std::path::Path;
 
-use xmss_types::{PublicKey, Signature, Statement, TslParams, VerificationBatch, Witness};
+use rand::SeedableRng;
+use xmss_lib::{hash_message_to_digest, SignatureScheme, SIGWinternitzLifetime18W1};
+
+use crate::shared_types::{
+    PublicKey, Signature, Statement, TslParams, VerificationBatch, Witness,
+};
 
 fn to_hex(bytes: &[u8]) -> String {
     const HEX: &[u8; 16] = b"0123456789abcdef";
@@ -17,6 +22,8 @@ fn to_hex(bytes: &[u8]) -> String {
 /// Generate a batch input JSON with the requested number of signatures.
 /// This creates structurally valid, dummy signatures/keys suitable for benchmarking.
 pub fn generate_batch_input(signatures: usize, out_path: &str) -> Result<(), Box<dyn Error>> {
+    smoke_test_hashsig(signatures)?;
+
     // Keep parameters small but valid; tree_height = 0 keeps auth_path empty.
     let params = TslParams {
         w: 4,
@@ -75,5 +82,24 @@ pub fn generate_batch_input(signatures: usize, out_path: &str) -> Result<(), Box
         }
     }
     fs::write(out_path, json)?;
+    Ok(())
+}
+
+fn smoke_test_hashsig(signatures: usize) -> Result<(), Box<dyn Error>> {
+    if signatures == 0 {
+        return Ok(());
+    }
+
+    let mut rng = rand::rngs::StdRng::seed_from_u64(0xBAD5EED);
+    let (pk, sk) = SIGWinternitzLifetime18W1::key_gen(&mut rng, 0, signatures.max(1));
+    let digest = hash_message_to_digest(b"openvm-hashsig-smoke");
+    let signature = SIGWinternitzLifetime18W1::sign(&mut rng, &sk, 0, &digest)
+        .map_err(|e| format!("hash-sig signing failed: {e}"))?;
+
+    let valid = SIGWinternitzLifetime18W1::verify(&pk, 0, &digest, &signature);
+    if !valid {
+        return Err("hash-sig verification failed for generated sample".into());
+    }
+
     Ok(())
 }
