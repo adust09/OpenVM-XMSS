@@ -5,4 +5,4 @@
 
 ## 2. Validation
 - [x] 2.1 `cargo test --workspace`
-- [ ] 2.2 `cargo openvm build -p xmss-guest` _(blocked: OpenVM bundles rustc 1.86.0-nightly while this workspace declares `rust-version = 1.87`, so the build command fails before compiling `xmss-types`.)_
+- [x] 2.2 `cargo openvm build -p xmss-guest` _(passes with `cd guest && cargo openvm build` after updating to a rustc 1.87.0-capable toolchain.)_

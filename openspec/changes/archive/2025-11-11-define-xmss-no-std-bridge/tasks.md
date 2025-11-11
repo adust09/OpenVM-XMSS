@@ -7,5 +7,5 @@
 
 ## 2. Validation
 - [x] 2.1 `cargo test --workspace`
-- [ ] 2.2 `cargo build -p guest` _(fails on this machine: standard `cargo build` expects a `main`, and `cargo openvm build` currently errors because openvm pins rustc 1.86.0 while the workspace requires 1.87.0)_
+- [x] 2.2 `cargo build -p guest` _(validated via `cd guest && cargo openvm build` now that the toolchain is rustc 1.87.0-compatible)_
 - [x] 2.3 Round-trip serde test for `xmss-types::VerificationBatch`

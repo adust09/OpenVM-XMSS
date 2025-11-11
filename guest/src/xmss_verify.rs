@@ -101,7 +101,7 @@ pub fn verify_one(
     for e in &elems {
         concat.extend_from_slice(e);
     }
-    let mut leaf = truncated_sha256(&concat);
+    let leaf = truncated_sha256(&concat);
 
     // Compute Merkle root from auth path and leaf_index
     let root = merkle_root_from_path(leaf, sig.leaf_index as u64, &auth_path, &pk_parameter);
