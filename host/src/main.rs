@@ -3,7 +3,6 @@ use std::error::Error;
 
 mod commands;
 mod utils;
-mod shared_types;
 
 use commands::*;
 

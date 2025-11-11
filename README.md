@@ -45,6 +45,14 @@ OPENVM_GUEST_FEATURES=cuda \
 
 Note: This expects `cargo-openvm` to be installed and keys generated (`cd guest && cargo openvm keygen`). If a command fails, the host will surface a helpful error.
 
+## 3.5 Host ↔ Guest Boundary
+
+- Host-side crates (`xmss-lib`, `xmss-host`, benches) are the only components that link the `hashsig` crate. They derive XMSS keys/signatures, hash arbitrary messages with SHA-256, and serialize the resulting witness into `xmss-types::VerificationBatch`.
+- The guest program is `#![no_std]` and depends solely on `xmss-types` for serde. It never links `hashsig`; all XMSS material arrives as serialized buffers prepared by the host.
+- Every signing flow must validate the requested epoch against the `(activation_epoch, num_active_epochs)` range supplied at key generation. Attempts outside that interval are rejected before calling into `hashsig`.
+- `Statement.m` always stores the 32-byte SHA-256 digest that was signed. This ensures the host and guest agree on the exact bytes that were proven, regardless of the original message length.
+- XMSS primitives are instantiated via `hashsig::signature::generalized_xmss::instantiations_poseidon::lifetime_2_to_the_18::winternitz::SIGWinternitzLifetime18W1`, so public keys/witness fragments use KoalaBear Poseidon field elements (e.g., 7×4-byte nodes, 5×4-byte parameters).
+
 ## 4. Benchmarking
 
 This repository provides OpenVM end-to-end benchmarking capabilities. Measure OpenVM execution times for `prove app` / `verify app` from the host. The CLI also reports peak memory (RSS of child processes) after each iteration.
