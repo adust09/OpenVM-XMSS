@@ -24,7 +24,26 @@ rustup component add rust-src --toolchain nightly-2025-02-14
 
 ## 3. Getting Started
 
-You can drive the OpenVM workflow via the host CLI:
+### Quick Start (Default Benchmark)
+
+The simplest way to run a full benchmark (prove + verify with 2 signatures):
+
+```bash
+# Run full benchmark with default settings (2 signatures)
+cargo run --release --bin xmss-host
+```
+
+This command will:
+1. Auto-generate input with 2 signatures
+2. Run prove (generate OpenVM proof)
+3. Run verify (verify the proof)
+4. Display timing and memory metrics for each step
+
+Note: First run requires keys generation (`cd guest && cargo openvm keygen`).
+
+### Advanced Usage
+
+You can also drive the OpenVM workflow via explicit subcommands:
 
 ```bash
 # Build the guest once (optional)
@@ -56,6 +75,21 @@ Note: This expects `cargo-openvm` to be installed and keys generated (`cd guest 
 ## 4. Benchmarking
 
 This repository provides OpenVM end-to-end benchmarking capabilities. Measure OpenVM execution times for `prove app` / `verify app` from the host. The CLI also reports peak memory (RSS of child processes) after each iteration.
+
+### Default Full Benchmark
+
+Run the complete workflow (input generation, prove, verify) with a single command:
+
+```bash
+# Full benchmark with 2 signatures (fixed)
+cargo run --release --bin xmss-host
+```
+
+Output includes timing for each phase and total execution time.
+
+### Individual Operations
+
+You can also benchmark specific operations:
 
 ```bash
 # prove app with 100 signatures

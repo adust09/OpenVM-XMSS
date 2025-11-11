@@ -11,7 +11,7 @@ use commands::*;
 #[command(about = "XMSS zkVM proof generation and verification")]
 struct Cli {
     #[command(subcommand)]
-    command: Commands,
+    command: Option<Commands>,
 }
 
 #[derive(Subcommand)]
@@ -55,15 +55,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Prove { input } => handle_prove(input)?,
-        Commands::Verify => handle_verify()?,
-        Commands::BenchmarkOpenvm {
+        Some(Commands::Prove { input }) => handle_prove(input)?,
+        Some(Commands::Verify) => handle_verify()?,
+        Some(Commands::BenchmarkOpenvm {
             op,
             input,
             iterations,
             generate_input,
             signatures,
-        } => handle_benchmark_openvm(op, input, iterations, generate_input, signatures)?,
+        }) => handle_benchmark_openvm(op, input, iterations, generate_input, signatures)?,
+        None => {
+            // Default behavior: run full benchmark (prove + verify with 2 signatures)
+            handle_benchmark_full()?
+        }
     }
 
     Ok(())
