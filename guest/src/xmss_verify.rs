@@ -1,139 +1,67 @@
+#![cfg(not(feature = "std-entry"))]
 extern crate alloc;
-use crate::hash::set_sha256_bytes;
-use crate::hash::sha256_bytes;
-use crate::tsl::encode_vertex;
-use alloc::vec::Vec;
-use xmss_types::Statement;
-use xmss_types::{PublicKey, Signature, TslParams, VerificationBatch};
 
-const POSEIDON_FE_BYTES: usize = 4;
-const POSEIDON_HASH_LEN_FE: usize = 7;
-const POSEIDON_PARAMETER_LEN_FE: usize = 5;
-const NODE_BYTES: usize = POSEIDON_FE_BYTES * POSEIDON_HASH_LEN_FE;
-const PARAMETER_BYTES: usize = POSEIDON_FE_BYTES * POSEIDON_PARAMETER_LEN_FE;
+use alloc::{vec, vec::Vec};
 
-type Node = [u8; NODE_BYTES];
-type Parameter = [u8; PARAMETER_BYTES];
+use openvm_sha2::sha256;
+use p3_field::{PrimeCharacteristicRing, PrimeField64};
+use p3_koala_bear::{
+    KoalaBear, Poseidon2KoalaBear, default_koalabear_poseidon2_16, default_koalabear_poseidon2_24,
+};
+use p3_symmetric::Permutation;
+use xmss_types::{PublicKey, Signature, Statement, TslParams, VerificationBatch};
+
+const FE_BYTES: usize = core::mem::size_of::<KoalaBear>();
+const HASH_LEN_FE: usize = 7;
+const PARAMETER_LEN_FE: usize = 5;
+const RANDOMNESS_LEN_FE: usize = 5;
+const TWEAK_LEN_FE: usize = 2;
+const MSG_LEN_FE: usize = 9;
+const NUM_CHUNKS_MESSAGE: usize = 155;
+const NUM_CHUNKS_CHECKSUM: usize = 8;
+const NUM_CHAINS: usize = NUM_CHUNKS_MESSAGE + NUM_CHUNKS_CHECKSUM;
+const TREE_HEIGHT: usize = 18;
+const BASE: usize = 2;
+const FIELD_MODULUS: u32 = KoalaBear::ORDER_U64 as u32;
+const TWEAK_SEPARATOR_FOR_MESSAGE_HASH: u8 = 0x02;
+const TWEAK_SEPARATOR_FOR_TREE_HASH: u8 = 0x01;
+const TWEAK_SEPARATOR_FOR_CHAIN_HASH: u8 = 0x00;
+const DOMAIN_PARAMETERS_LENGTH: usize = 4;
+const POSEIDON_CAPACITY_LEN: usize = 9;
 
 pub fn verify_batch(batch: &VerificationBatch) -> (bool, u32) {
-    let VerificationBatch { params, statement, witness } = batch;
-    // Basic statement binding and length checks
-    let expected_k = statement.k as usize;
-    if statement.public_keys.len() != expected_k {
+    let expected = batch.statement.k as usize;
+    if batch.statement.public_keys.len() != expected
+        || batch.witness.signatures.len() != expected
+    {
         return (false, 0);
     }
-    if witness.signatures.len() != expected_k {
+
+    if !params_match(&batch.params) {
         return (false, 0);
     }
+
+    let epoch = match u32::try_from(batch.statement.ep) {
+        Ok(v) => v,
+        Err(_) => return (false, 0),
+    };
 
     let mut all_valid = true;
     let mut count: u32 = 0;
-    for i in 0..expected_k {
-        let sig = &witness.signatures[i];
-        let pk = &statement.public_keys[i];
-        let ok = verify_one(params, sig, &statement.m, statement.ep, pk);
+    for (sig, pk) in batch
+        .witness
+        .signatures
+        .iter()
+        .zip(batch.statement.public_keys.iter())
+    {
+        let ok = verify_one(sig, pk, &batch.statement.m, epoch);
         all_valid &= ok;
         count += 1;
     }
     (all_valid, count)
 }
 
-
-pub fn verify_one(
-    params: &TslParams,
-    sig: &Signature,
-    msg: &[u8],
-    ep: u64,
-    pk: &PublicKey,
-) -> bool {
-    if params.w <= 1 || params.v == 0 {
-        return false;
-    }
-    if sig.wots_chain_ends.len() != params.v as usize {
-        return false;
-    }
-    if sig.auth_path.len() != params.tree_height as usize {
-        return false;
-    }
-    let wots_chain = match vecs_to_nodes(&sig.wots_chain_ends) {
-        Some(v) => v,
-        None => return false,
-    };
-    let auth_path = match vecs_to_nodes(&sig.auth_path) {
-        Some(v) => v,
-        None => return false,
-    };
-    let pk_parameter = match vec_to_parameter(&pk.parameter) {
-        Some(seed) => seed,
-        None => return false,
-    };
-    let pk_root = match vec_to_node(&pk.root) {
-        Some(root) => root,
-        None => return false,
-    };
-    // Derive chain steps via TSL using epoch||message and zero randomness (hypercube XMSS convention)
-    let mut dom = alloc::vec::Vec::with_capacity(8 + msg.len());
-    dom.extend_from_slice(&ep.to_le_bytes());
-    dom.extend_from_slice(msg);
-    let zero_rnd = [0u8; 32];
-    let steps = match encode_vertex(&dom, &zero_rnd, params) {
-        Ok(v) => v,
-        Err(_) => return false,
-    };
-    if steps.len() != wots_chain.len() {
-        return false;
-    }
-
-    // WOTS chain: hash each element forward (w-1-steps[i]) times
-    let w = params.w as u16;
-    let mut elems: Vec<Node> = Vec::with_capacity(steps.len());
-    for (i, sbytes) in wots_chain.iter().enumerate() {
-        let mut val = *sbytes;
-        let t = (w - 1).saturating_sub(steps[i]);
-        for _ in 0..t {
-            val = truncated_sha256(&val);
-        }
-        elems.push(val);
-    }
-
-    // Compress WOTS public key elements into leaf: H(concat(elems))
-    let mut concat = Vec::with_capacity(elems.len() * NODE_BYTES);
-    for e in &elems {
-        concat.extend_from_slice(e);
-    }
-    let leaf = truncated_sha256(&concat);
-
-    // Compute Merkle root from auth path and leaf_index
-    let root = merkle_root_from_path(leaf, sig.leaf_index as u64, &auth_path, &pk_parameter);
-    // Compare to public key root
-    root == pk_root
-}
-
-fn merkle_root_from_path(
-    mut leaf: Node,
-    leaf_index: u64,
-    auth_path: &[Node],
-    public_parameter: &Parameter,
-) -> Node {
-    // Hypercube-style placeholder hash: H(0x01 || parameter || height_be || index_be || left || right)
-    for (h, sibling) in auth_path.iter().enumerate() {
-        let bit = (leaf_index >> h) & 1;
-        let (left, right) = if bit == 0 { (&leaf, sibling) } else { (sibling, &leaf) };
-        let mut buf =
-            alloc::vec::Vec::with_capacity(1 + PARAMETER_BYTES + 4 + 4 + 2 * NODE_BYTES);
-        buf.push(0x01);
-        buf.extend_from_slice(public_parameter);
-        buf.extend_from_slice(&(h as u32).to_be_bytes());
-        buf.extend_from_slice(&((leaf_index >> (h + 1)) as u32).to_be_bytes());
-        buf.extend_from_slice(left);
-        buf.extend_from_slice(right);
-        leaf = truncated_sha256(&buf);
-    }
-    leaf
-}
-
 pub fn statement_commitment(stmt: &Statement) -> [u8; 32] {
-    // Deterministic encoding: k||ep||len(m)||m||len(pks)||each(root||parameter)
     let mut buf = alloc::vec::Vec::new();
     buf.extend_from_slice(&stmt.k.to_le_bytes());
     buf.extend_from_slice(&stmt.ep.to_le_bytes());
@@ -146,148 +74,524 @@ pub fn statement_commitment(stmt: &Statement) -> [u8; 32] {
         buf.extend_from_slice(&pk.root);
         buf.extend_from_slice(&pk.parameter);
     }
-    sha256_bytes(&buf)
+    sha256(&buf)
 }
 
-fn vecs_to_nodes(src: &[Vec<u8>]) -> Option<Vec<Node>> {
-    let mut out = Vec::with_capacity(src.len());
-    for item in src {
-        if item.len() != NODE_BYTES {
-            return None;
+fn params_match(params: &TslParams) -> bool {
+    params.w == 2
+        && params.v as usize == NUM_CHAINS
+        && params.tree_height as usize == TREE_HEIGHT
+}
+
+fn verify_one(sig: &Signature, pk: &PublicKey, message: &[u8], epoch: u32) -> bool {
+    if sig.wots_chain_ends.len() != NUM_CHAINS {
+        return false;
+    }
+    if sig.auth_path.len() != TREE_HEIGHT {
+        return false;
+    }
+    if sig.randomness.len() != RANDOMNESS_LEN_FE * FE_BYTES {
+        return false;
+    }
+    if pk.parameter.len() != PARAMETER_LEN_FE * FE_BYTES
+        || pk.root.len() != HASH_LEN_FE * FE_BYTES
+    {
+        return false;
+    }
+    if sig.leaf_index != epoch {
+        return false;
+    }
+
+    let randomness = match bytes_to_field_array::<RANDOMNESS_LEN_FE>(&sig.randomness) {
+        Some(r) => r,
+        None => return false,
+    };
+    let parameter = match bytes_to_field_array::<PARAMETER_LEN_FE>(&pk.parameter) {
+        Some(p) => p,
+        None => return false,
+    };
+    let pk_root = match bytes_to_field_array::<HASH_LEN_FE>(&pk.root) {
+        Some(r) => r,
+        None => return false,
+    };
+    let chain_hashes = match decode_domains(&sig.wots_chain_ends) {
+        Some(v) => v,
+        None => return false,
+    };
+    let auth_path = match decode_domains(&sig.auth_path) {
+        Some(v) => v,
+        None => return false,
+    };
+    let digest = match digest_to_array(message) {
+        Some(d) => d,
+        None => return false,
+    };
+
+    let codeword = winternitz_codeword(&parameter, epoch, &randomness, &digest);
+    if codeword.len() != NUM_CHAINS {
+        return false;
+    }
+
+    let mut chain_ends = Vec::with_capacity(NUM_CHAINS);
+    for (chain_index, (&steps_seen, start_hash)) in codeword
+        .iter()
+        .zip(chain_hashes.iter())
+        .enumerate()
+    {
+        let start_pos = steps_seen as u8;
+        if steps_seen as usize >= BASE {
+            return false;
         }
-        let mut arr = [0u8; NODE_BYTES];
-        arr.copy_from_slice(item);
-        out.push(arr);
+        let remaining = (BASE - 1) as u8 - start_pos;
+        let progressed = walk_chain(
+            &parameter,
+            epoch,
+            chain_index as u8,
+            start_pos,
+            remaining as usize,
+            start_hash,
+        );
+        chain_ends.push(progressed);
+    }
+
+    hash_tree_verify(&parameter, &pk_root, epoch, &chain_ends, &auth_path)
+}
+
+fn digest_to_array(message: &[u8]) -> Option<[u8; 32]> {
+    if message.len() != 32 {
+        return None;
+    }
+    let mut out = [0u8; 32];
+    out.copy_from_slice(message);
+    Some(out)
+}
+
+fn bytes_to_field_array<const N: usize>(bytes: &[u8]) -> Option<[KoalaBear; N]> {
+    if bytes.len() != N * FE_BYTES {
+        return None;
+    }
+    let mut out = [KoalaBear::ZERO; N];
+    for (i, chunk) in bytes.chunks_exact(FE_BYTES).enumerate() {
+        let limb = u32::from_le_bytes(chunk.try_into().unwrap());
+        out[i] = KoalaBear::from_u32(limb);
     }
     Some(out)
 }
 
-fn vec_to_node(input: &[u8]) -> Option<Node> {
-    if input.len() != NODE_BYTES {
-        return None;
+fn decode_domains(input: &[Vec<u8>]) -> Option<Vec<[KoalaBear; HASH_LEN_FE]>> {
+    let mut out = Vec::with_capacity(input.len());
+    for item in input {
+        out.push(bytes_to_field_array::<HASH_LEN_FE>(item)?);
     }
-    let mut arr = [0u8; NODE_BYTES];
-    arr.copy_from_slice(input);
-    Some(arr)
+    Some(out)
 }
 
-fn vec_to_parameter(input: &[u8]) -> Option<Parameter> {
-    if input.len() != PARAMETER_BYTES {
-        return None;
-    }
-    let mut arr = [0u8; PARAMETER_BYTES];
-    arr.copy_from_slice(input);
-    Some(arr)
+fn winternitz_codeword(
+    parameter: &[KoalaBear; PARAMETER_LEN_FE],
+    epoch: u32,
+    randomness: &[KoalaBear; RANDOMNESS_LEN_FE],
+    message: &[u8; 32],
+) -> Vec<u8> {
+    let mut chunks = poseidon_message_hash(parameter, epoch, randomness, message);
+    let checksum: u64 = chunks
+        .iter()
+        .map(|&x| (BASE as u64 - 1) - x as u64)
+        .sum();
+    let checksum_bits = checksum.to_le_bytes();
+    let checksum_chunks = bytes_to_chunks_1bit(&checksum_bits);
+    chunks.extend_from_slice(&checksum_chunks[..NUM_CHUNKS_CHECKSUM]);
+    chunks
 }
 
-/// Placeholder hash used until Poseidon gadgets are available in the guest.
-/// Applies SHA-256 and truncates the digest to the Poseidon node width.
-fn truncated_sha256(input: &[u8]) -> Node {
-    let mut digest = [0u8; 32];
-    set_sha256_bytes(input, &mut digest);
-    let mut truncated = [0u8; NODE_BYTES];
-    truncated.copy_from_slice(&digest[..NODE_BYTES]);
-    truncated
+fn poseidon_message_hash(
+    parameter: &[KoalaBear; PARAMETER_LEN_FE],
+    epoch: u32,
+    randomness: &[KoalaBear; RANDOMNESS_LEN_FE],
+    message: &[u8; 32],
+) -> Vec<u8> {
+    let perm = poseidon2_24();
+    let message_fe = encode_message(message);
+    let epoch_fe = encode_epoch(epoch);
+
+    let mut combined = Vec::with_capacity(
+        RANDOMNESS_LEN_FE + PARAMETER_LEN_FE + TWEAK_LEN_FE + MSG_LEN_FE,
+    );
+    combined.extend(randomness);
+    combined.extend(parameter);
+    combined.extend(epoch_fe);
+    combined.extend(message_fe);
+
+    let hash = poseidon_compress24::<HASH_LEN_FE>(&perm, &combined);
+    decode_to_chunks(&hash)
 }
 
-#[cfg(test)]
-mod tests {
-    extern crate std;
-    use super::*;
-    use std::vec;
-    use xmss_types::{PublicKey, Statement};
-
-    #[test]
-    fn merkle_root_two_levels() {
-        // Check against hypercube-style domain separated node hashing
-        let leaf = truncated_sha256(b"leaf");
-        let mut sib1 = [0u8; NODE_BYTES];
-        sib1.fill(1);
-        let mut sib2 = [0u8; NODE_BYTES];
-        sib2.fill(2);
-        let auth = vec![sib1, sib2];
-        let mut seed = [0u8; PARAMETER_BYTES];
-        seed.fill(9);
-
-        // leaf_index = 0: left then left
-        let r0 = merkle_root_from_path(leaf, 0, &auth, &seed);
-
-        // Manually compute domain-separated nodes
-        let mut h = leaf;
-        let mut buf = std::vec::Vec::with_capacity(1 + PARAMETER_BYTES + 4 + 4 + 2 * NODE_BYTES);
-        // level 0, index 0
-        buf.clear();
-        buf.push(0x01);
-        buf.extend_from_slice(&seed);
-        buf.extend_from_slice(&0u32.to_be_bytes());
-        buf.extend_from_slice(&0u32.to_be_bytes());
-        buf.extend_from_slice(&leaf);
-        buf.extend_from_slice(&sib1);
-        h = truncated_sha256(&buf);
-        // level 1, index 0
-        buf.clear();
-        buf.push(0x01);
-        buf.extend_from_slice(&seed);
-        buf.extend_from_slice(&1u32.to_be_bytes());
-        buf.extend_from_slice(&0u32.to_be_bytes());
-        buf.extend_from_slice(&h);
-        buf.extend_from_slice(&sib2);
-        h = truncated_sha256(&buf);
-        assert_eq!(r0, h);
-
-        // leaf_index = 1: right at level 0
-        let r1 = merkle_root_from_path(leaf, 1, &auth, &seed);
-        // level 0, index 0 (parent index)
-        buf.clear();
-        buf.push(0x01);
-        buf.extend_from_slice(&seed);
-        buf.extend_from_slice(&0u32.to_be_bytes());
-        buf.extend_from_slice(&0u32.to_be_bytes());
-        buf.extend_from_slice(&sib1);
-        buf.extend_from_slice(&leaf);
-        h = truncated_sha256(&buf);
-        // level 1, index 0
-        buf.clear();
-        buf.push(0x01);
-        buf.extend_from_slice(&seed);
-        buf.extend_from_slice(&1u32.to_be_bytes());
-        buf.extend_from_slice(&0u32.to_be_bytes());
-        buf.extend_from_slice(&h);
-        buf.extend_from_slice(&sib2);
-        h = truncated_sha256(&buf);
-        assert_eq!(r1, h);
-        assert_ne!(r0, r1);
+fn encode_message(message: &[u8; 32]) -> [KoalaBear; MSG_LEN_FE] {
+    let mut acc = SmallBigUint::from_le_bytes(message);
+    let mut out = [KoalaBear::ZERO; MSG_LEN_FE];
+    for digit in &mut out {
+        let rem = acc.div_small(FIELD_MODULUS);
+        *digit = KoalaBear::from_u32(rem);
     }
+    out
+}
 
-    #[test]
-    fn statement_commit_deterministic() {
-        // Build a small statement and check the commitment against manual hashing
-        let stmt = Statement {
-            k: 1,
-            ep: 0,
-            m: b"single".to_vec(),
-            public_keys: vec![PublicKey {
-                root: vec![0u8; NODE_BYTES],
-                parameter: vec![0u8; PARAMETER_BYTES],
-            }],
+fn encode_epoch(epoch: u32) -> [KoalaBear; TWEAK_LEN_FE] {
+    let value = ((epoch as u64) << 8) | (TWEAK_SEPARATOR_FOR_MESSAGE_HASH as u64);
+    let mut acc = SmallBigUint::from_u64(value);
+    let mut out = [KoalaBear::ZERO; TWEAK_LEN_FE];
+    for digit in &mut out {
+        let rem = acc.div_small(FIELD_MODULUS);
+        *digit = KoalaBear::from_u32(rem);
+    }
+    out
+}
+
+fn decode_to_chunks(fe: &[KoalaBear; HASH_LEN_FE]) -> Vec<u8> {
+    let mut acc = SmallBigUint::zero();
+    for element in fe {
+        acc.mul_small(FIELD_MODULUS);
+        acc.add_small(element.as_canonical_u64() as u32);
+    }
+    biguint_to_base(acc, BASE, NUM_CHUNKS_MESSAGE)
+}
+
+fn bytes_to_chunks_1bit(bytes: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(bytes.len() * 8);
+    for &b in bytes {
+        out.push(b & 1);
+        out.push((b >> 1) & 1);
+        out.push((b >> 2) & 1);
+        out.push((b >> 3) & 1);
+        out.push((b >> 4) & 1);
+        out.push((b >> 5) & 1);
+        out.push((b >> 6) & 1);
+        out.push((b >> 7) & 1);
+    }
+    out
+}
+
+fn walk_chain(
+    parameter: &[KoalaBear; PARAMETER_LEN_FE],
+    epoch: u32,
+    chain_index: u8,
+    start_pos: u8,
+    steps: usize,
+    start: &[KoalaBear; HASH_LEN_FE],
+) -> [KoalaBear; HASH_LEN_FE] {
+    let mut current = *start;
+    if steps == 0 {
+        return current;
+    }
+    for offset in 0..steps {
+        let tweak = PoseidonTweak::chain(epoch, chain_index, start_pos + offset as u8 + 1);
+        current = poseidon_apply(parameter, &tweak, &[current]);
+    }
+    current
+}
+
+fn hash_tree_verify(
+    parameter: &[KoalaBear; PARAMETER_LEN_FE],
+    root: &[KoalaBear; HASH_LEN_FE],
+    position: u32,
+    leaf: &[[KoalaBear; HASH_LEN_FE]],
+    path: &[[KoalaBear; HASH_LEN_FE]],
+) -> bool {
+    if path.len() != TREE_HEIGHT {
+        return false;
+    }
+    let mut current = poseidon_apply(parameter, &PoseidonTweak::tree(0, position), leaf);
+    let mut idx = position;
+    for (level, sibling) in path.iter().enumerate() {
+        let children = if idx & 1 == 0 {
+            [current, *sibling]
+        } else {
+            [*sibling, current]
         };
-        let got = statement_commitment(&stmt);
+        idx >>= 1;
+        current = poseidon_apply(parameter, &PoseidonTweak::tree(level as u8 + 1, idx), &children);
+    }
+    current == *root
+}
 
-        // Manual encode: k||ep||len(m)||m||len(pks)||pk0.root||pk0.parameter
-        let mut buf = vec![];
-        buf.extend_from_slice(&stmt.k.to_le_bytes());
-        buf.extend_from_slice(&stmt.ep.to_le_bytes());
-        let mlen: u32 = stmt.m.len() as u32;
-        buf.extend_from_slice(&mlen.to_le_bytes());
-        buf.extend_from_slice(&stmt.m);
-        let pklen: u32 = stmt.public_keys.len() as u32;
-        buf.extend_from_slice(&pklen.to_le_bytes());
-        for pk in &stmt.public_keys {
-            buf.extend_from_slice(&pk.root);
-            buf.extend_from_slice(&pk.parameter);
+#[derive(Copy, Clone)]
+enum PoseidonTweak {
+    Tree { level: u8, pos_in_level: u32 },
+    Chain { epoch: u32, chain_index: u8, pos_in_chain: u8 },
+}
+
+impl PoseidonTweak {
+    fn tree(level: u8, pos_in_level: u32) -> Self {
+        PoseidonTweak::Tree {
+            level,
+            pos_in_level,
         }
-        let mut exp = [0u8; 32];
-        set_sha256(&buf, &mut exp);
-        assert_eq!(got, exp);
+    }
+
+    fn chain(epoch: u32, chain_index: u8, pos_in_chain: u8) -> Self {
+        PoseidonTweak::Chain {
+            epoch,
+            chain_index,
+            pos_in_chain,
+        }
+    }
+
+    fn to_field_elements(&self) -> [KoalaBear; TWEAK_LEN_FE] {
+        let mut acc: u128 = match self {
+            PoseidonTweak::Tree {
+                level,
+                pos_in_level,
+            } => {
+                ((*level as u128) << 40)
+                    | ((*pos_in_level as u128) << 8)
+                    | (TWEAK_SEPARATOR_FOR_TREE_HASH as u128)
+            }
+            PoseidonTweak::Chain {
+                epoch,
+                chain_index,
+                pos_in_chain,
+            } => {
+                ((*epoch as u128) << 24)
+                    | ((*chain_index as u128) << 16)
+                    | ((*pos_in_chain as u128) << 8)
+                    | (TWEAK_SEPARATOR_FOR_CHAIN_HASH as u128)
+            }
+        };
+        let mut out = [KoalaBear::ZERO; TWEAK_LEN_FE];
+        for digit in &mut out {
+            let value = (acc % KoalaBear::ORDER_U64 as u128) as u64;
+            acc /= KoalaBear::ORDER_U64 as u128;
+            *digit = KoalaBear::from_u64(value);
+        }
+        out
+    }
+}
+
+fn poseidon_apply(
+    parameter: &[KoalaBear; PARAMETER_LEN_FE],
+    tweak: &PoseidonTweak,
+    message: &[[KoalaBear; HASH_LEN_FE]],
+) -> [KoalaBear; HASH_LEN_FE] {
+    let tweak_fe = tweak.to_field_elements();
+    match message.len() {
+        1 => {
+            let perm = poseidon2_16();
+            let mut input = Vec::with_capacity(PARAMETER_LEN_FE + TWEAK_LEN_FE + HASH_LEN_FE);
+            input.extend(parameter);
+            input.extend(&tweak_fe);
+            input.extend(&message[0]);
+            poseidon_compress16::<HASH_LEN_FE>(&perm, &input)
+        }
+        2 => {
+            let perm = poseidon2_24();
+            let mut input = Vec::with_capacity(PARAMETER_LEN_FE + TWEAK_LEN_FE + 2 * HASH_LEN_FE);
+            input.extend(parameter);
+            input.extend(&tweak_fe);
+            input.extend(&message[0]);
+            input.extend(&message[1]);
+            poseidon_compress24::<HASH_LEN_FE>(&perm, &input)
+        }
+        _ => {
+            let perm = poseidon2_24();
+            let lengths = [
+                PARAMETER_LEN_FE as u32,
+                TWEAK_LEN_FE as u32,
+                message.len() as u32,
+                HASH_LEN_FE as u32,
+            ];
+            let mut combined = Vec::with_capacity(
+                PARAMETER_LEN_FE + TWEAK_LEN_FE + message.len() * HASH_LEN_FE,
+            );
+            combined.extend(parameter);
+            combined.extend(&tweak_fe);
+            combined.extend(message.iter().flatten().copied());
+            let capacity = poseidon_safe_domain_separator24(&perm, &lengths);
+            poseidon_sponge24::<HASH_LEN_FE>(&perm, &capacity, &combined)
+        }
+    }
+}
+
+fn poseidon_safe_domain_separator24(
+    perm: &Poseidon2KoalaBear<24>,
+    params: &[u32; DOMAIN_PARAMETERS_LENGTH],
+) -> [KoalaBear; POSEIDON_CAPACITY_LEN] {
+    let mut acc: u128 = 0;
+    for &param in params {
+        acc = (acc << 32) | (param as u128);
+    }
+    let mut input = [KoalaBear::ZERO; 24];
+    for slot in &mut input {
+        let digit = (acc % KoalaBear::ORDER_U64 as u128) as u64;
+        acc /= KoalaBear::ORDER_U64 as u128;
+        *slot = KoalaBear::from_u64(digit);
+    }
+    poseidon_compress24::<POSEIDON_CAPACITY_LEN>(perm, &input)
+}
+
+fn poseidon_sponge24<const OUT_LEN: usize>(
+    perm: &Poseidon2KoalaBear<24>,
+    capacity_value: &[KoalaBear],
+    input: &[KoalaBear],
+) -> [KoalaBear; OUT_LEN] {
+    assert!(capacity_value.len() < 24);
+    let rate = 24 - capacity_value.len();
+    let extra = (rate - (input.len() % rate)) % rate;
+    let mut padded = input.to_vec();
+    padded.resize(input.len() + extra, KoalaBear::ZERO);
+
+    let mut state = [KoalaBear::ZERO; 24];
+    state[rate..].copy_from_slice(capacity_value);
+
+    for chunk in padded.chunks(rate) {
+        for (idx, val) in chunk.iter().enumerate() {
+            state[idx] += *val;
+        }
+        perm.permute_mut(&mut state);
+    }
+
+    let mut out = Vec::with_capacity(OUT_LEN);
+    while out.len() < OUT_LEN {
+        out.extend_from_slice(&state[..rate]);
+        perm.permute_mut(&mut state);
+    }
+    out[..OUT_LEN].try_into().unwrap()
+}
+
+fn poseidon_compress24<const OUT_LEN: usize>(
+    perm: &Poseidon2KoalaBear<24>,
+    input: &[KoalaBear],
+) -> [KoalaBear; OUT_LEN] {
+    assert!(input.len() >= OUT_LEN);
+    let mut padded = [KoalaBear::ZERO; 24];
+    padded[..input.len()].copy_from_slice(input);
+    let mut state = padded;
+    perm.permute_mut(&mut state);
+    for (i, val) in input.iter().enumerate() {
+        state[i] += *val;
+    }
+    state[..OUT_LEN].try_into().unwrap()
+}
+
+fn poseidon_compress16<const OUT_LEN: usize>(
+    perm: &Poseidon2KoalaBear<16>,
+    input: &[KoalaBear],
+) -> [KoalaBear; OUT_LEN] {
+    assert!(input.len() >= OUT_LEN);
+    let mut padded = [KoalaBear::ZERO; 16];
+    padded[..input.len()].copy_from_slice(input);
+    let mut state = padded;
+    perm.permute_mut(&mut state);
+    for (i, val) in input.iter().enumerate() {
+        state[i] += *val;
+    }
+    state[..OUT_LEN].try_into().unwrap()
+}
+
+fn poseidon2_24() -> Poseidon2KoalaBear<24> {
+    default_koalabear_poseidon2_24()
+}
+
+fn poseidon2_16() -> Poseidon2KoalaBear<16> {
+    default_koalabear_poseidon2_16()
+}
+
+fn biguint_to_base(mut value: SmallBigUint, base: usize, digits: usize) -> Vec<u8> {
+    let mut out = vec![0u8; digits];
+    for slot in &mut out {
+        if value.is_zero() {
+            break;
+        }
+        *slot = value.div_small(base as u32) as u8;
+    }
+    out
+}
+
+#[derive(Clone, Debug)]
+struct SmallBigUint {
+    limbs: Vec<u32>,
+}
+
+impl SmallBigUint {
+    fn zero() -> Self {
+        Self { limbs: Vec::new() }
+    }
+
+    fn from_u64(value: u64) -> Self {
+        let mut limbs = Vec::new();
+        limbs.push(value as u32);
+        let hi = (value >> 32) as u32;
+        if hi != 0 {
+            limbs.push(hi);
+        }
+        let mut out = Self { limbs };
+        out.normalize();
+        out
+    }
+
+    fn from_le_bytes(bytes: &[u8]) -> Self {
+        let mut limbs = Vec::with_capacity((bytes.len() + 3) / 4);
+        for chunk in bytes.chunks(4) {
+            let mut buf = [0u8; 4];
+            buf[..chunk.len()].copy_from_slice(chunk);
+            limbs.push(u32::from_le_bytes(buf));
+        }
+        let mut out = Self { limbs };
+        out.normalize();
+        out
+    }
+
+    fn normalize(&mut self) {
+        while matches!(self.limbs.last(), Some(0)) {
+            self.limbs.pop();
+        }
+    }
+
+    fn is_zero(&self) -> bool {
+        self.limbs.is_empty()
+    }
+
+    fn mul_small(&mut self, mul: u32) {
+        if mul == 0 || self.is_zero() {
+            self.limbs.clear();
+            return;
+        }
+        let mut carry: u64 = 0;
+        for limb in &mut self.limbs {
+            let prod = (*limb as u64) * (mul as u64) + carry;
+            *limb = prod as u32;
+            carry = prod >> 32;
+        }
+        if carry != 0 {
+            self.limbs.push(carry as u32);
+        }
+    }
+
+    fn add_small(&mut self, add: u32) {
+        let mut carry = add as u64;
+        for limb in &mut self.limbs {
+            let sum = (*limb as u64) + carry;
+            *limb = sum as u32;
+            carry = sum >> 32;
+            if carry == 0 {
+                break;
+            }
+        }
+        if carry != 0 {
+            self.limbs.push(carry as u32);
+        }
+    }
+
+    fn div_small(&mut self, divisor: u32) -> u32 {
+        if divisor == 0 {
+            return 0;
+        }
+        let mut rem: u64 = 0;
+        for limb in self.limbs.iter_mut().rev() {
+            let cur = (rem << 32) | (*limb as u64);
+            let q = cur / divisor as u64;
+            rem = cur % divisor as u64;
+            *limb = q as u32;
+        }
+        self.normalize();
+        rem as u32
     }
 }

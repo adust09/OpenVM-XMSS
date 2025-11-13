@@ -1,8 +1,10 @@
-#![no_std]
-#![no_main]
+#![cfg_attr(not(feature = "std-entry"), no_std)]
+#![cfg_attr(not(feature = "std-entry"), no_main)]
 
+#[cfg(not(feature = "std-entry"))]
 openvm::entry!(main);
 
+#[cfg(not(feature = "std-entry"))]
 fn main() {
     use openvm::io::{read, reveal_u32};
     use xmss_types::VerificationBatch;
@@ -21,6 +23,12 @@ fn main() {
     }
 }
 
-mod hash;
-mod tsl;
+#[cfg(feature = "std-entry")]
+fn main() {
+    panic!(
+        "xmss-guest is meant to run under cargo openvm. Set OPENVM_GUEST_NO_DEFAULT_FEATURES=1 when invoking the host CLI."
+    );
+}
+
+#[cfg(not(feature = "std-entry"))]
 mod xmss_verify;

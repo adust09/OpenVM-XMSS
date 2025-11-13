@@ -24,45 +24,25 @@ rustup component add rust-src --toolchain nightly-2025-02-14
 
 ## 3. Getting Started
 
-### Quick Start (Default Benchmark)
+### Quick Start (固定ベンチ)
 
-The simplest way to run a full benchmark (prove + verify with 2 signatures):
-
-```bash
-# Run full benchmark with default settings (2 signatures)
+```
 cargo run --release --bin xmss-host
 ```
 
-This command will:
-1. Auto-generate input with 2 signatures
-2. Run prove (generate OpenVM proof)
-3. Run verify (verify the proof)
-4. Display timing and memory metrics for each step
+実行すると以下が自動で行われます（パラメータはコード内の定数で固定）：
+1. 署名 2 件分の入力 JSON を生成
+2. 必要に応じて `cargo openvm keygen` を実行（初回のみ）
+3. `cargo openvm prove app` → `cargo openvm verify app` を順に実行
+4. 各フェーズの所要時間とメモリ使用量を表示
 
-Note: First run requires keys generation (`cd guest && cargo openvm keygen`).
+追加の CLI オプションやサブコマンドはありません。カスタム件数で測定したい場合はコード中の定数 (`SIGNATURES` など) を書き換えてください。CUDA 等の OpenVM フィーチャーを使う場合は上記コマンドに環境変数 `OPENVM_GUEST_FEATURES=cuda` などを付与してください。
 
-### Advanced Usage
+#### デフォルトビルド vs OpenVM 実行
 
-You can also drive the OpenVM workflow via explicit subcommands:
-
-```bash
-# Build the guest once (optional)
-cd guest
-cargo openvm build --release
-cd ..
-
-# Generate proof with single signature (auto-generates input)
-OPENVM_GUEST_FEATURES=cuda \
-  cargo run -p xmss-host --bin xmss-host -- benchmark-openvm prove \
-  --signatures 1 --generate-input --iterations 1
-
-# Verify the app proof (uses guest/xmss-guest.app.proof by default)
-OPENVM_GUEST_FEATURES=cuda \
-  cargo run -p xmss-host --bin xmss-host -- verify
-
-```
-
-Note: This expects `cargo-openvm` to be installed and keys generated (`cd guest && cargo openvm keygen`). If a command fails, the host will surface a helpful error.
+- ゲスト crate のデフォルトは `#![no_std]` です。OpenVM 実行時は追加フラグ無しでそのままコンパイル・実行されます。
+- 手元で `cargo build --manifest-path guest/Cargo.toml` を通したい場合は `cargo build --manifest-path guest/Cargo.toml --features std-entry` のように明示的にフィーチャーを付与してください（`main()` スタブがリンクされます）。
+- ホスト CLI は prove/verify 実行前に `cargo openvm keygen` を自動実行するため、手動で `cd guest && cargo openvm keygen` を走らせる必要はありません。
 
 ## 3.5 Host ↔ Guest Boundary
 
@@ -74,37 +54,10 @@ Note: This expects `cargo-openvm` to be installed and keys generated (`cd guest 
 
 ## 4. Benchmarking
 
-This repository provides OpenVM end-to-end benchmarking capabilities. Measure OpenVM execution times for `prove app` / `verify app` from the host. The CLI also reports peak memory (RSS of child processes) after each iteration.
-
-### Default Full Benchmark
-
-Run the complete workflow (input generation, prove, verify) with a single command:
+This repository provides OpenVM end-to-end benchmarking capabilities. `xmss-host` always runs「入力生成 → prove → verify」までを固定パラメータで通し、各フェーズの時間／メモリを表示します。
 
 ```bash
-# Full benchmark with 2 signatures (fixed)
 cargo run --release --bin xmss-host
 ```
 
-Output includes timing for each phase and total execution time.
-
-### Individual Operations
-
-You can also benchmark specific operations:
-
-```bash
-# prove app with 100 signatures
-cargo run -p xmss-host --bin xmss-host -- benchmark-openvm prove --signatures 100 --generate-input --iterations 1
-
-# verify app: measure proof verification (uses guest/xmss-guest.app.proof by default)
-cargo run -p xmss-host --bin xmss-host -- benchmark-openvm verify --iterations 5
-```
-
-- `--signatures` (`-s`): Number of signatures to generate for benchmarking (default: 1)
-- `--iterations` (`-n`): Number of benchmark iterations to run (default: 1)
-- `--generate-input`: Generate valid input JSON if missing
-
-automatically calculated based on signature count: `h >= log2(signatures)`
-Run the prove command once per signature count (`N ∈ {1, 100, 500, 1000}`) and reuse the generated proof for verification.
-
-Notes:
-- Timings include OpenVM build/transpile work invoked by `cargo openvm`. With warm caches or build skipping, prove times may drop.
+出力には入力生成・prove・verify・合計時間、およびピークメモリ (子プロセス RSS) が含まれます。件数や反復回数を変えたい場合は `host/src/commands/benchmark_openvm.rs` 内の定数を書き換えてください。

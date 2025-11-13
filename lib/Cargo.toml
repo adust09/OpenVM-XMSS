@@ -11,6 +11,10 @@ license = "MIT"
 # XMSS library from hash-sig
 hashsig = { workspace = true }
 sha2 = "0.10"
+serde = { workspace = true }
+bincode = { workspace = true }
+p3-field = { workspace = true }
+p3-koala-bear = { workspace = true }
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }

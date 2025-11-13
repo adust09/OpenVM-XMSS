@@ -1,6 +1,7 @@
 use std::error::Error;
 use std::fmt::{self, Display};
 
+pub mod hashsig_export;
 pub mod zkvm;
 
 pub use zkvm::ZkvmHost;
