@@ -24,7 +24,7 @@ rustup component add rust-src --toolchain nightly-2025-02-14
 
 ## 3. Getting Started
 
-### Quick Start (Fixed Workflow)
+### Quick Start
 
 ```
 cargo run --release --bin xmss-host
@@ -51,13 +51,3 @@ No additional CLI flags or subcommands exist. To benchmark different batch sizes
 - Every signing flow must validate the requested epoch against the `(activation_epoch, num_active_epochs)` range supplied at key generation. Attempts outside that interval are rejected before calling into `hashsig`.
 - `Statement.m` always stores the 32-byte SHA-256 digest that was signed. This ensures the host and guest agree on the exact bytes that were proven, regardless of the original message length.
 - XMSS primitives are instantiated via `hashsig::signature::generalized_xmss::instantiations_poseidon::lifetime_2_to_the_18::winternitz::SIGWinternitzLifetime18W1`, so public keys/witness fragments use KoalaBear Poseidon field elements (e.g., 7×4-byte nodes, 5×4-byte parameters).
-
-## 4. Benchmarking
-
-This repository provides a fully scripted OpenVM benchmark. Each run of `xmss-host` performs “input generation → prove → verify” with fixed parameters and reports the timing and peak memory of every phase.
-
-```bash
-cargo run --release --bin xmss-host
-```
-
-The output includes input/prove/verify/total durations plus child-process peak RSS. To experiment with other batch sizes or iteration counts, adjust the constants inside `host/src/commands/benchmark_openvm.rs` and rebuild.
