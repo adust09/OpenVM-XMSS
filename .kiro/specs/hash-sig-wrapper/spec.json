@@ -1,0 +1,31 @@
+{
+  "feature_name": "hash-sig-wrapper",
+  "created_at": "2025-11-02T02:07:00Z",
+  "updated_at": "2025-11-02T02:30:00Z",
+  "language": "en",
+  "phase": "tasks-generated",
+  "approvals": {
+    "requirements": {
+      "generated": true,
+      "approved": true,
+      "approved_at": "2025-11-02T02:22:00Z",
+      "notes": "Auto-approved via -y flag during design generation"
+    },
+    "design": {
+      "generated": true,
+      "approved": true,
+      "approved_at": "2025-11-02T02:30:00Z",
+      "notes": "Auto-approved via -y flag during task generation"
+    },
+    "tasks": {
+      "generated": true,
+      "approved": false
+    }
+  },
+  "ready_for_implementation": false,
+  "design_decisions": {
+    "type_conversion_strategy": "Serialization-based intermediate format",
+    "message_preprocessing": "Always hash to SHA-256",
+    "epoch_management": "Pre-validation with explicit caller control"
+  }
+}

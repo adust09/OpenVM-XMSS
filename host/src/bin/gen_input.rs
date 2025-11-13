@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 
+use xmss_lib::hash_message_to_digest;
 use xmss_types::{Statement, TslParams, VerificationBatch, Witness};
 
 fn to_hex(bytes: &[u8]) -> String {
@@ -25,7 +26,7 @@ fn main() {
     let statement = Statement {
         k: 0,
         ep: 0,
-        m: vec![],
+        m: hash_message_to_digest(&[]).to_vec(),
         public_keys: vec![],
     };
     let witness = Witness { signatures: vec![] };

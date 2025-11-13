@@ -9,9 +9,13 @@ edition = "2021"
 openvm = { git = "https://github.com/openvm-org/openvm.git", default-features = false,tag = "v1.4.0" }
 xmss-types = { path = "../xmss-types", default-features = false }
 openvm-sha2 = { git = "https://github.com/openvm-org/openvm.git" ,tag = "v1.4.0" }
+p3-field = { git = "https://github.com/Plonky3/Plonky3.git", package = "p3-field", rev = "2117e4baac83269ace80c2aa109cec053f703842", default-features = false }
+p3-koala-bear = { git = "https://github.com/Plonky3/Plonky3.git", package = "p3-koala-bear", rev = "2117e4baac83269ace80c2aa109cec053f703842", default-features = false }
+p3-symmetric = { git = "https://github.com/Plonky3/Plonky3.git", package = "p3-symmetric", rev = "2117e4baac83269ace80c2aa109cec053f703842", default-features = false }
 
 [features]
 default = []
+std-entry = []
 cuda = [
     "openvm-sha2/cuda",
 ]

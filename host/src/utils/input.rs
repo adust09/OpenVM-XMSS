@@ -2,6 +2,15 @@ use std::error::Error;
 use std::fs;
 use std::path::Path;
 
+use rand::SeedableRng;
+use xmss_lib::{
+    hash_message_to_digest,
+    hashsig_export::{
+        export_public_key, export_signature, HashsigExportError, WINTERNITZ_TREE_HEIGHT,
+        WINTERNITZ_W1_NUM_CHAINS,
+    },
+    validate_epoch_range, SIGWinternitzLifetime18W1, SignatureScheme,
+};
 use xmss_types::{PublicKey, Signature, Statement, TslParams, VerificationBatch, Witness};
 
 fn to_hex(bytes: &[u8]) -> String {
@@ -17,42 +26,59 @@ fn to_hex(bytes: &[u8]) -> String {
 /// Generate a batch input JSON with the requested number of signatures.
 /// This creates structurally valid, dummy signatures/keys suitable for benchmarking.
 pub fn generate_batch_input(signatures: usize, out_path: &str) -> Result<(), Box<dyn Error>> {
-    // Keep parameters small but valid; tree_height = 0 keeps auth_path empty.
     let params = TslParams {
-        w: 4,
-        v: 4,
-        d0: 4,
+        w: 2,
+        v: WINTERNITZ_W1_NUM_CHAINS as u16,
+        d0: 0,
         security_bits: 128,
-        tree_height: 0,
+        tree_height: WINTERNITZ_TREE_HEIGHT as u16,
     };
 
-    // Dummy public keys and signatures matching params.
-    let mut pks = Vec::with_capacity(signatures);
-    let mut sigs = Vec::with_capacity(signatures);
-    for i in 0..signatures {
-        let mut root = [0u8; 32];
-        let mut seed = [0u8; 32];
-        root[0] = (i & 0xff) as u8;
-        seed[1] = ((i >> 1) & 0xff) as u8;
-        pks.push(PublicKey { root, seed });
+    let digest = hash_message_to_digest(b"bench");
+    let mut rng = rand::rngs::StdRng::seed_from_u64(0xBAD5EED);
+    let epoch: u32 = 0;
 
-        let mut randomness = [0u8; 32];
-        randomness[2] = (i & 0xff) as u8;
-        sigs.push(Signature {
-            leaf_index: 0,
-            randomness,
-            wots_signature: vec![[0u8; 32]; params.v as usize],
-            auth_path: vec![],
+    let mut public_keys = Vec::with_capacity(signatures);
+    let mut signatures_vec = Vec::with_capacity(signatures);
+
+    for _ in 0..signatures {
+        let activation_epoch = epoch as usize;
+        let num_active_epochs = 1usize;
+        let (pk, sk) =
+            SIGWinternitzLifetime18W1::key_gen(&mut rng, activation_epoch, num_active_epochs);
+        validate_epoch_range(activation_epoch, num_active_epochs, epoch)?;
+        let sig = SIGWinternitzLifetime18W1::sign(&mut rng, &sk, epoch, &digest)
+            .map_err(|e| format!("hash-sig signing failed: {e}"))?;
+
+        if !SIGWinternitzLifetime18W1::verify(&pk, epoch, &digest, &sig) {
+            return Err("hash-sig verification failed for generated sample".into());
+        }
+
+        let exported_pk = export_public_key(&pk).map_err(export_err)?;
+        let exported_sig = export_signature(&sig).map_err(export_err)?;
+
+        public_keys.push(PublicKey {
+            root: exported_pk.root,
+            parameter: exported_pk.parameter,
+        });
+
+        signatures_vec.push(Signature {
+            leaf_index: epoch,
+            randomness: exported_sig.randomness,
+            wots_chain_ends: exported_sig.chain_hashes,
+            auth_path: exported_sig.auth_path,
         });
     }
 
     let statement = Statement {
         k: signatures as u32,
-        ep: 0,
-        m: b"bench".to_vec(),
-        public_keys: pks,
+        ep: epoch as u64,
+        m: digest.to_vec(),
+        public_keys,
     };
-    let witness = Witness { signatures: sigs };
+    let witness = Witness {
+        signatures: signatures_vec,
+    };
     let batch = VerificationBatch {
         params,
         statement,
@@ -76,4 +102,8 @@ pub fn generate_batch_input(signatures: usize, out_path: &str) -> Result<(), Box
     }
     fs::write(out_path, json)?;
     Ok(())
+}
+
+fn export_err(err: HashsigExportError) -> Box<dyn Error> {
+    Box::new(err)
 }
