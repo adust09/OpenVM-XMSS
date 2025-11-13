@@ -24,25 +24,25 @@ rustup component add rust-src --toolchain nightly-2025-02-14
 
 ## 3. Getting Started
 
-### Quick Start (固定ベンチ)
+### Quick Start (Fixed Workflow)
 
 ```
 cargo run --release --bin xmss-host
 ```
 
-実行すると以下が自動で行われます（パラメータはコード内の定数で固定）：
-1. 署名 2 件分の入力 JSON を生成
-2. 必要に応じて `cargo openvm keygen` を実行（初回のみ）
-3. `cargo openvm prove app` → `cargo openvm verify app` を順に実行
-4. 各フェーズの所要時間とメモリ使用量を表示
+This single command always executes the exact same pipeline (all parameters come from constants inside `host/src/commands/benchmark_openvm.rs`):
+1. Generate an input JSON with two signatures.
+2. Run `cargo openvm keygen` automatically when needed (first run only).
+3. Execute `cargo openvm prove app` and then `cargo openvm verify app`.
+4. Print per-phase timings and child-process peak RSS.
 
-追加の CLI オプションやサブコマンドはありません。カスタム件数で測定したい場合はコード中の定数 (`SIGNATURES` など) を書き換えてください。CUDA 等の OpenVM フィーチャーを使う場合は上記コマンドに環境変数 `OPENVM_GUEST_FEATURES=cuda` などを付与してください。
+No additional CLI flags or subcommands exist. To benchmark different batch sizes or iteration counts, edit the corresponding constants (e.g. `SIGNATURES`) in the code. To enable optional OpenVM features such as CUDA, prefix the command with `OPENVM_GUEST_FEATURES=cuda`.
 
-#### デフォルトビルド vs OpenVM 実行
+#### Default build vs OpenVM run
 
-- ゲスト crate のデフォルトは `#![no_std]` です。OpenVM 実行時は追加フラグ無しでそのままコンパイル・実行されます。
-- 手元で `cargo build --manifest-path guest/Cargo.toml` を通したい場合は `cargo build --manifest-path guest/Cargo.toml --features std-entry` のように明示的にフィーチャーを付与してください（`main()` スタブがリンクされます）。
-- ホスト CLI は prove/verify 実行前に `cargo openvm keygen` を自動実行するため、手動で `cd guest && cargo openvm keygen` を走らせる必要はありません。
+- The guest crate defaults to `#![no_std]`, so OpenVM builds run without extra flags.
+- If you want to check the guest with a plain `cargo build`, invoke `cargo build --manifest-path guest/Cargo.toml --features std-entry` to link the stub `main()`.
+- The host CLI runs `cargo openvm keygen` automatically before prove/verify, so you never have to run it manually.
 
 ## 3.5 Host ↔ Guest Boundary
 
@@ -54,10 +54,10 @@ cargo run --release --bin xmss-host
 
 ## 4. Benchmarking
 
-This repository provides OpenVM end-to-end benchmarking capabilities. `xmss-host` always runs「入力生成 → prove → verify」までを固定パラメータで通し、各フェーズの時間／メモリを表示します。
+This repository provides a fully scripted OpenVM benchmark. Each run of `xmss-host` performs “input generation → prove → verify” with fixed parameters and reports the timing and peak memory of every phase.
 
 ```bash
 cargo run --release --bin xmss-host
 ```
 
-出力には入力生成・prove・verify・合計時間、およびピークメモリ (子プロセス RSS) が含まれます。件数や反復回数を変えたい場合は `host/src/commands/benchmark_openvm.rs` 内の定数を書き換えてください。
+The output includes input/prove/verify/total durations plus child-process peak RSS. To experiment with other batch sizes or iteration counts, adjust the constants inside `host/src/commands/benchmark_openvm.rs` and rebuild.
