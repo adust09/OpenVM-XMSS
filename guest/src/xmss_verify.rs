@@ -28,6 +28,32 @@ const TWEAK_SEPARATOR_FOR_TREE_HASH: u8 = 0x01;
 const TWEAK_SEPARATOR_FOR_CHAIN_HASH: u8 = 0x00;
 const DOMAIN_PARAMETERS_LENGTH: usize = 4;
 const POSEIDON_CAPACITY_LEN: usize = 9;
+const POSEIDON_INPUT_SINGLE: usize = PARAMETER_LEN_FE + TWEAK_LEN_FE + HASH_LEN_FE;
+const POSEIDON_INPUT_PAIR: usize = PARAMETER_LEN_FE + TWEAK_LEN_FE + 2 * HASH_LEN_FE;
+const MESSAGE_HASH_INPUT_LEN: usize =
+    RANDOMNESS_LEN_FE + PARAMETER_LEN_FE + TWEAK_LEN_FE + MSG_LEN_FE;
+
+struct PoseidonContext {
+    perm16: Poseidon2KoalaBear<16>,
+    perm24: Poseidon2KoalaBear<24>,
+}
+
+impl PoseidonContext {
+    fn new() -> Self {
+        Self {
+            perm16: default_koalabear_poseidon2_16(),
+            perm24: default_koalabear_poseidon2_24(),
+        }
+    }
+
+    fn perm16(&self) -> &Poseidon2KoalaBear<16> {
+        &self.perm16
+    }
+
+    fn perm24(&self) -> &Poseidon2KoalaBear<24> {
+        &self.perm24
+    }
+}
 
 pub fn verify_batch(batch: &VerificationBatch) -> (bool, u32) {
     let expected = batch.statement.k as usize;
@@ -46,6 +72,7 @@ pub fn verify_batch(batch: &VerificationBatch) -> (bool, u32) {
         Err(_) => return (false, 0),
     };
 
+    let poseidon = PoseidonContext::new();
     let mut all_valid = true;
     let mut count: u32 = 0;
     for (sig, pk) in batch
@@ -54,7 +81,7 @@ pub fn verify_batch(batch: &VerificationBatch) -> (bool, u32) {
         .iter()
         .zip(batch.statement.public_keys.iter())
     {
-        let ok = verify_one(sig, pk, &batch.statement.m, epoch);
+        let ok = verify_one(sig, pk, &batch.statement.m, epoch, &poseidon);
         all_valid &= ok;
         count += 1;
     }
@@ -83,7 +110,13 @@ fn params_match(params: &TslParams) -> bool {
         && params.tree_height as usize == TREE_HEIGHT
 }
 
-fn verify_one(sig: &Signature, pk: &PublicKey, message: &[u8], epoch: u32) -> bool {
+fn verify_one(
+    sig: &Signature,
+    pk: &PublicKey,
+    message: &[u8],
+    epoch: u32,
+    poseidon: &PoseidonContext,
+) -> bool {
     if sig.wots_chain_ends.len() != NUM_CHAINS {
         return false;
     }
@@ -127,7 +160,7 @@ fn verify_one(sig: &Signature, pk: &PublicKey, message: &[u8], epoch: u32) -> bo
         None => return false,
     };
 
-    let codeword = winternitz_codeword(&parameter, epoch, &randomness, &digest);
+    let codeword = winternitz_codeword(poseidon, &parameter, epoch, &randomness, &digest);
     if codeword.len() != NUM_CHAINS {
         return false;
     }
@@ -144,6 +177,7 @@ fn verify_one(sig: &Signature, pk: &PublicKey, message: &[u8], epoch: u32) -> bo
         }
         let remaining = (BASE - 1) as u8 - start_pos;
         let progressed = walk_chain(
+            poseidon,
             &parameter,
             epoch,
             chain_index as u8,
@@ -154,7 +188,14 @@ fn verify_one(sig: &Signature, pk: &PublicKey, message: &[u8], epoch: u32) -> bo
         chain_ends.push(progressed);
     }
 
-    hash_tree_verify(&parameter, &pk_root, epoch, &chain_ends, &auth_path)
+    hash_tree_verify(
+        poseidon,
+        &parameter,
+        &pk_root,
+        epoch,
+        &chain_ends,
+        &auth_path,
+    )
 }
 
 fn digest_to_array(message: &[u8]) -> Option<[u8; 32]> {
@@ -187,12 +228,13 @@ fn decode_domains(input: &[Vec<u8>]) -> Option<Vec<[KoalaBear; HASH_LEN_FE]>> {
 }
 
 fn winternitz_codeword(
+    poseidon: &PoseidonContext,
     parameter: &[KoalaBear; PARAMETER_LEN_FE],
     epoch: u32,
     randomness: &[KoalaBear; RANDOMNESS_LEN_FE],
     message: &[u8; 32],
 ) -> Vec<u8> {
-    let mut chunks = poseidon_message_hash(parameter, epoch, randomness, message);
+    let mut chunks = poseidon_message_hash(poseidon, parameter, epoch, randomness, message);
     let checksum: u64 = chunks
         .iter()
         .map(|&x| (BASE as u64 - 1) - x as u64)
@@ -204,24 +246,26 @@ fn winternitz_codeword(
 }
 
 fn poseidon_message_hash(
+    poseidon: &PoseidonContext,
     parameter: &[KoalaBear; PARAMETER_LEN_FE],
     epoch: u32,
     randomness: &[KoalaBear; RANDOMNESS_LEN_FE],
     message: &[u8; 32],
 ) -> Vec<u8> {
-    let perm = poseidon2_24();
     let message_fe = encode_message(message);
     let epoch_fe = encode_epoch(epoch);
 
-    let mut combined = Vec::with_capacity(
-        RANDOMNESS_LEN_FE + PARAMETER_LEN_FE + TWEAK_LEN_FE + MSG_LEN_FE,
-    );
-    combined.extend(randomness);
-    combined.extend(parameter);
-    combined.extend(epoch_fe);
-    combined.extend(message_fe);
+    let mut combined = [KoalaBear::ZERO; MESSAGE_HASH_INPUT_LEN];
+    let mut idx = 0;
+    combined[idx..idx + RANDOMNESS_LEN_FE].copy_from_slice(randomness);
+    idx += RANDOMNESS_LEN_FE;
+    combined[idx..idx + PARAMETER_LEN_FE].copy_from_slice(parameter);
+    idx += PARAMETER_LEN_FE;
+    combined[idx..idx + TWEAK_LEN_FE].copy_from_slice(&epoch_fe);
+    idx += TWEAK_LEN_FE;
+    combined[idx..idx + MSG_LEN_FE].copy_from_slice(&message_fe);
 
-    let hash = poseidon_compress24::<HASH_LEN_FE>(&perm, &combined);
+    let hash = poseidon_compress24::<HASH_LEN_FE>(poseidon.perm24(), &combined);
     decode_to_chunks(&hash)
 }
 
@@ -271,6 +315,7 @@ fn bytes_to_chunks_1bit(bytes: &[u8]) -> Vec<u8> {
 }
 
 fn walk_chain(
+    poseidon: &PoseidonContext,
     parameter: &[KoalaBear; PARAMETER_LEN_FE],
     epoch: u32,
     chain_index: u8,
@@ -284,12 +329,13 @@ fn walk_chain(
     }
     for offset in 0..steps {
         let tweak = PoseidonTweak::chain(epoch, chain_index, start_pos + offset as u8 + 1);
-        current = poseidon_apply(parameter, &tweak, &[current]);
+        current = poseidon_apply(poseidon, parameter, &tweak, &[current]);
     }
     current
 }
 
 fn hash_tree_verify(
+    poseidon: &PoseidonContext,
     parameter: &[KoalaBear; PARAMETER_LEN_FE],
     root: &[KoalaBear; HASH_LEN_FE],
     position: u32,
@@ -299,7 +345,7 @@ fn hash_tree_verify(
     if path.len() != TREE_HEIGHT {
         return false;
     }
-    let mut current = poseidon_apply(parameter, &PoseidonTweak::tree(0, position), leaf);
+    let mut current = poseidon_apply(poseidon, parameter, &PoseidonTweak::tree(0, position), leaf);
     let mut idx = position;
     for (level, sibling) in path.iter().enumerate() {
         let children = if idx & 1 == 0 {
@@ -308,7 +354,12 @@ fn hash_tree_verify(
             [*sibling, current]
         };
         idx >>= 1;
-        current = poseidon_apply(parameter, &PoseidonTweak::tree(level as u8 + 1, idx), &children);
+        current = poseidon_apply(
+            poseidon,
+            parameter,
+            &PoseidonTweak::tree(level as u8 + 1, idx),
+            &children,
+        );
     }
     current == *root
 }
@@ -367,6 +418,7 @@ impl PoseidonTweak {
 }
 
 fn poseidon_apply(
+    poseidon: &PoseidonContext,
     parameter: &[KoalaBear; PARAMETER_LEN_FE],
     tweak: &PoseidonTweak,
     message: &[[KoalaBear; HASH_LEN_FE]],
@@ -374,24 +426,28 @@ fn poseidon_apply(
     let tweak_fe = tweak.to_field_elements();
     match message.len() {
         1 => {
-            let perm = poseidon2_16();
-            let mut input = Vec::with_capacity(PARAMETER_LEN_FE + TWEAK_LEN_FE + HASH_LEN_FE);
-            input.extend(parameter);
-            input.extend(&tweak_fe);
-            input.extend(&message[0]);
-            poseidon_compress16::<HASH_LEN_FE>(&perm, &input)
+            let mut input = [KoalaBear::ZERO; POSEIDON_INPUT_SINGLE];
+            let mut idx = 0;
+            input[idx..idx + PARAMETER_LEN_FE].copy_from_slice(parameter);
+            idx += PARAMETER_LEN_FE;
+            input[idx..idx + TWEAK_LEN_FE].copy_from_slice(&tweak_fe);
+            idx += TWEAK_LEN_FE;
+            input[idx..idx + HASH_LEN_FE].copy_from_slice(&message[0]);
+            poseidon_compress16::<HASH_LEN_FE>(poseidon.perm16(), &input)
         }
         2 => {
-            let perm = poseidon2_24();
-            let mut input = Vec::with_capacity(PARAMETER_LEN_FE + TWEAK_LEN_FE + 2 * HASH_LEN_FE);
-            input.extend(parameter);
-            input.extend(&tweak_fe);
-            input.extend(&message[0]);
-            input.extend(&message[1]);
-            poseidon_compress24::<HASH_LEN_FE>(&perm, &input)
+            let mut input = [KoalaBear::ZERO; POSEIDON_INPUT_PAIR];
+            let mut idx = 0;
+            input[idx..idx + PARAMETER_LEN_FE].copy_from_slice(parameter);
+            idx += PARAMETER_LEN_FE;
+            input[idx..idx + TWEAK_LEN_FE].copy_from_slice(&tweak_fe);
+            idx += TWEAK_LEN_FE;
+            input[idx..idx + HASH_LEN_FE].copy_from_slice(&message[0]);
+            idx += HASH_LEN_FE;
+            input[idx..idx + HASH_LEN_FE].copy_from_slice(&message[1]);
+            poseidon_compress24::<HASH_LEN_FE>(poseidon.perm24(), &input)
         }
         _ => {
-            let perm = poseidon2_24();
             let lengths = [
                 PARAMETER_LEN_FE as u32,
                 TWEAK_LEN_FE as u32,
@@ -404,8 +460,8 @@ fn poseidon_apply(
             combined.extend(parameter);
             combined.extend(&tweak_fe);
             combined.extend(message.iter().flatten().copied());
-            let capacity = poseidon_safe_domain_separator24(&perm, &lengths);
-            poseidon_sponge24::<HASH_LEN_FE>(&perm, &capacity, &combined)
+            let capacity = poseidon_safe_domain_separator24(poseidon.perm24(), &lengths);
+            poseidon_sponge24::<HASH_LEN_FE>(poseidon.perm24(), &capacity, &combined)
         }
     }
 }
@@ -434,18 +490,18 @@ fn poseidon_sponge24<const OUT_LEN: usize>(
 ) -> [KoalaBear; OUT_LEN] {
     assert!(capacity_value.len() < 24);
     let rate = 24 - capacity_value.len();
-    let extra = (rate - (input.len() % rate)) % rate;
-    let mut padded = input.to_vec();
-    padded.resize(input.len() + extra, KoalaBear::ZERO);
 
     let mut state = [KoalaBear::ZERO; 24];
     state[rate..].copy_from_slice(capacity_value);
 
-    for chunk in padded.chunks(rate) {
-        for (idx, val) in chunk.iter().enumerate() {
-            state[idx] += *val;
+    let mut idx = 0;
+    while idx < input.len() {
+        let chunk_len = core::cmp::min(rate, input.len() - idx);
+        for (slot, val) in input[idx..idx + chunk_len].iter().enumerate() {
+            state[slot] += *val;
         }
         perm.permute_mut(&mut state);
+        idx += chunk_len;
     }
 
     let mut out = Vec::with_capacity(OUT_LEN);
@@ -484,14 +540,6 @@ fn poseidon_compress16<const OUT_LEN: usize>(
         state[i] += *val;
     }
     state[..OUT_LEN].try_into().unwrap()
-}
-
-fn poseidon2_24() -> Poseidon2KoalaBear<24> {
-    default_koalabear_poseidon2_24()
-}
-
-fn poseidon2_16() -> Poseidon2KoalaBear<16> {
-    default_koalabear_poseidon2_16()
 }
 
 fn biguint_to_base(mut value: SmallBigUint, base: usize, digits: usize) -> Vec<u8> {
