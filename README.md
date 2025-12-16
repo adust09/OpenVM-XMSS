@@ -13,13 +13,13 @@ This repository focuses on verifiable XMSS verification inside OpenVM:
 
 ## 2. Prerequisites
 
-Install the OpenVM CLI and toolchain (see OpenVM book). This project now targets Rust 1.87 or newer, so make sure the stable toolchain is installed locally:
+Install the OpenVM CLI and toolchain (see OpenVM book). This project now targets Rust 1.90 or newer, so make sure the stable toolchain is installed locally:
 
 ```bash
-rustup install 1.87.0
-cargo +1.87.0 install --locked --git https://github.com/openvm-org/openvm.git --tag v1.3.0 cargo-openvm
-rustup install nightly-2025-02-14
-rustup component add rust-src --toolchain nightly-2025-02-14
+rustup install 1.90.0
+cargo +1.90.0 install --locked --git https://github.com/openvm-org/openvm.git --tag v1.4.2 cargo-openvm
+rustup install nightly-2025-08-02
+rustup component add rust-src --toolchain nightly-2025-08-02
 ```
 
 ## 3. Getting Started
@@ -36,7 +36,6 @@ This single command always executes the exact same pipeline (all parameters come
 3. Execute `cargo openvm prove app` and then `cargo openvm verify app`.
 4. Print per-phase timings and child-process peak RSS.
 
-No additional CLI flags or subcommands exist. To benchmark different batch sizes or iteration counts, edit the corresponding constants (e.g. `SIGNATURES`) in the code. To enable optional OpenVM features such as CUDA, prefix the command with `OPENVM_GUEST_FEATURES=cuda`.
 
 #### Default build vs OpenVM run
 
