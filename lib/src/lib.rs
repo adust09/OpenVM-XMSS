@@ -1,13 +1,17 @@
 use std::error::Error;
 use std::fmt::{self, Display};
 
-pub mod hashsig_export;
+pub mod leansig_export;
 pub mod zkvm;
 
 pub use zkvm::ZkvmHost;
 
-pub use hashsig::signature::generalized_xmss::instantiations_poseidon::lifetime_2_to_the_18::winternitz::SIGWinternitzLifetime18W1;
-pub use hashsig::signature::SignatureScheme;
+// leanSig signature scheme: TargetSum encoding with Poseidon hash
+pub use leansig::signature::generalized_xmss::instantiations_poseidon::lifetime_2_to_the_18::target_sum::SIGTargetSumLifetime18W1NoOff;
+pub use leansig::signature::SignatureScheme;
+
+// Type alias for the default signature scheme
+pub type DefaultSignatureScheme = SIGTargetSumLifetime18W1NoOff;
 
 /// Errors surfaced by host-side helpers when preparing XMSS data.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -76,23 +80,22 @@ pub fn hash_message_to_digest(message: &[u8]) -> [u8; 32] {
 #[cfg(test)]
 mod tests {
     use super::{
-        hash_message_to_digest, validate_epoch_range, SIGWinternitzLifetime18W1, XmssHostError,
+        hash_message_to_digest, validate_epoch_range, DefaultSignatureScheme, XmssHostError,
     };
-    use hashsig::signature::SignatureScheme;
+    use leansig::signature::SignatureScheme;
     use rand::SeedableRng;
 
     #[test]
     fn sign_and_verify_roundtrip() {
         let mut rng = rand::rngs::StdRng::seed_from_u64(0xDEADBEEF);
-        let (pk, sk) = SIGWinternitzLifetime18W1::key_gen(&mut rng, 0, 4);
+        let (pk, sk) = DefaultSignatureScheme::key_gen(&mut rng, 0, 4);
 
-        let digest = hash_message_to_digest(b"hashsig-roundtrip");
-        let signature = SIGWinternitzLifetime18W1::sign(&mut rng, &sk, 0, &digest)
-            .expect("hash-sig signing should succeed for fixed digest");
+        let digest = hash_message_to_digest(b"leansig-roundtrip");
+        // leanSig sign doesn't take external RNG - randomness is internal
+        let signature = DefaultSignatureScheme::sign(&sk, 0, &digest)
+            .expect("leanSig signing should succeed for fixed digest");
 
-        assert!(SIGWinternitzLifetime18W1::verify(
-            &pk, 0, &digest, &signature
-        ));
+        assert!(DefaultSignatureScheme::verify(&pk, 0, &digest, &signature));
     }
 
     #[test]
