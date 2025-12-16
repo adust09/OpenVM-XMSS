@@ -12,14 +12,20 @@ use p3_symmetric::Permutation;
 use xmss_types::{PublicKey, Signature, Statement, TslParams, VerificationBatch};
 
 const FE_BYTES: usize = core::mem::size_of::<KoalaBear>();
+// Tree and chain hash output length (7 field elements)
 const HASH_LEN_FE: usize = 7;
+// Message hash output length (5 field elements, compressed separately)
+const MSG_HASH_LEN_FE: usize = 5;
 const PARAMETER_LEN_FE: usize = 5;
-const RANDOMNESS_LEN_FE: usize = 5;
+// leanSig TargetSum w=1 uses 6 field elements for randomness (rho)
+const RANDOMNESS_LEN_FE: usize = 6;
 const TWEAK_LEN_FE: usize = 2;
 const MSG_LEN_FE: usize = 9;
-const NUM_CHUNKS_MESSAGE: usize = 155;
-const NUM_CHUNKS_CHECKSUM: usize = 8;
-const NUM_CHAINS: usize = NUM_CHUNKS_MESSAGE + NUM_CHUNKS_CHECKSUM;
+// leanSig TargetSum w=1 uses 155 chains (no checksum - TargetSum is incomparable encoding)
+const NUM_CHAINS: usize = 155;
+// Number of base-2 digits to extract from the message hash
+// For TargetSum w=1, this equals NUM_CHAINS (no separate checksum)
+const NUM_CHUNKS_MESSAGE: usize = NUM_CHAINS;
 const TREE_HEIGHT: usize = 18;
 const BASE: usize = 2;
 const FIELD_MODULUS: u32 = KoalaBear::ORDER_U64 as u32;
@@ -160,7 +166,7 @@ fn verify_one(
         None => return false,
     };
 
-    let codeword = winternitz_codeword(poseidon, &parameter, epoch, &randomness, &digest);
+    let codeword = targetsim_codeword(poseidon, &parameter, epoch, &randomness, &digest);
     if codeword.len() != NUM_CHAINS {
         return false;
     }
@@ -227,22 +233,20 @@ fn decode_domains(input: &[Vec<u8>]) -> Option<Vec<[KoalaBear; HASH_LEN_FE]>> {
     Some(out)
 }
 
-fn winternitz_codeword(
+/// Compute the TargetSum codeword (chain positions) for a message.
+///
+/// Unlike Winternitz which adds checksum chunks, TargetSum uses an
+/// "incomparable" encoding where the sum of all positions is constrained
+/// to a fixed target. This eliminates the need for checksums.
+fn targetsim_codeword(
     poseidon: &PoseidonContext,
     parameter: &[KoalaBear; PARAMETER_LEN_FE],
     epoch: u32,
     randomness: &[KoalaBear; RANDOMNESS_LEN_FE],
     message: &[u8; 32],
 ) -> Vec<u8> {
-    let mut chunks = poseidon_message_hash(poseidon, parameter, epoch, randomness, message);
-    let checksum: u64 = chunks
-        .iter()
-        .map(|&x| (BASE as u64 - 1) - x as u64)
-        .sum();
-    let checksum_bits = checksum.to_le_bytes();
-    let checksum_chunks = bytes_to_chunks_1bit(&checksum_bits);
-    chunks.extend_from_slice(&checksum_chunks[..NUM_CHUNKS_CHECKSUM]);
-    chunks
+    // For TargetSum, we just need the message hash chunks - no checksum
+    poseidon_message_hash(poseidon, parameter, epoch, randomness, message)
 }
 
 fn poseidon_message_hash(
@@ -265,7 +269,7 @@ fn poseidon_message_hash(
     idx += TWEAK_LEN_FE;
     combined[idx..idx + MSG_LEN_FE].copy_from_slice(&message_fe);
 
-    let hash = poseidon_compress24::<HASH_LEN_FE>(poseidon.perm24(), &combined);
+    let hash = poseidon_compress24::<MSG_HASH_LEN_FE>(poseidon.perm24(), &combined);
     decode_to_chunks(&hash)
 }
 
@@ -290,28 +294,13 @@ fn encode_epoch(epoch: u32) -> [KoalaBear; TWEAK_LEN_FE] {
     out
 }
 
-fn decode_to_chunks(fe: &[KoalaBear; HASH_LEN_FE]) -> Vec<u8> {
+fn decode_to_chunks(fe: &[KoalaBear; MSG_HASH_LEN_FE]) -> Vec<u8> {
     let mut acc = SmallBigUint::zero();
     for element in fe {
         acc.mul_small(FIELD_MODULUS);
         acc.add_small(element.as_canonical_u64() as u32);
     }
     biguint_to_base(acc, BASE, NUM_CHUNKS_MESSAGE)
-}
-
-fn bytes_to_chunks_1bit(bytes: &[u8]) -> Vec<u8> {
-    let mut out = Vec::with_capacity(bytes.len() * 8);
-    for &b in bytes {
-        out.push(b & 1);
-        out.push((b >> 1) & 1);
-        out.push((b >> 2) & 1);
-        out.push((b >> 3) & 1);
-        out.push((b >> 4) & 1);
-        out.push((b >> 5) & 1);
-        out.push((b >> 6) & 1);
-        out.push((b >> 7) & 1);
-    }
-    out
 }
 
 fn walk_chain(
