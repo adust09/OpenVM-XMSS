@@ -15,9 +15,6 @@ cargo build --release
 # Run the default benchmark (2 signatures: generate → prove → verify)
 cargo run --release --bin xmss-host
 
-# Use fake Merkle paths for faster input generation (benchmark-only, not secure)
-cargo run --release --bin xmss-host -- --fake-keys
-
 # Build guest for plain cargo check (not OpenVM)
 cargo build --manifest-path guest/Cargo.toml --features std-entry
 
@@ -56,7 +53,7 @@ OPENVM_GUEST_FEATURES=cuda cargo run --release --bin xmss-host
 ┌─────────────────────────────────────────────────────────────┐
 │                         HOST                                 │
 │  xmss-host: CLI orchestrator (prove/verify workflow)        │
-│  xmss-lib: XMSS operations via hashsig crate                │
+│  xmss-lib: XMSS operations via leanSig crate                │
 │            + zkVM integration utilities                      │
 │  xmss-types: Serialization types (VerificationBatch, etc.)  │
 └──────────────────────────┬──────────────────────────────────┘
@@ -64,7 +61,7 @@ OPENVM_GUEST_FEATURES=cuda cargo run --release --bin xmss-host
 ┌──────────────────────────▼──────────────────────────────────┐
 │                     GUEST (no_std)                           │
 │  xmss-guest: zkVM program that verifies XMSS batches        │
-│  - Never links hashsig (all crypto data serialized by host) │
+│  - Never links leanSig (all crypto data serialized by host) │
 │  - Uses openvm-sha2 for accelerated SHA-256                 │
 │  - Poseidon2 over KoalaBear field for Merkle tree ops       │
 │  - Outputs: (all_valid, count, statement_commitment)        │
@@ -74,24 +71,25 @@ OPENVM_GUEST_FEATURES=cuda cargo run --release --bin xmss-host
 ### Crate Responsibilities
 
 - **host/** (`xmss-host`): CLI entry point. Orchestrates input generation, proof generation, and verification.
-- **lib/** (`xmss-lib`): XMSS primitives via `hashsig` crate. Provides `ZkvmHost` for preparing guest inputs. Host-only (links `hashsig`).
+- **lib/** (`xmss-lib`): XMSS primitives via `leanSig` crate. Provides `ZkvmHost` for preparing guest inputs. Host-only (links `leanSig`).
 - **xmss-types/**: Shared types (`VerificationBatch`, `Statement`, `Witness`, `TslParams`) with `no_std` support. Used by both host and guest for serialization.
 - **guest/**: zkVM program. Separate workspace (not in main `Cargo.toml`). Pure verification logic with Poseidon2-KoalaBear.
 
 ### Key Type Flow
 
-1. Host generates XMSS keys/signatures using `hashsig`
+1. Host generates XMSS keys/signatures using `leanSig`
 2. Host serializes to `VerificationBatch` (includes `TslParams`, `Statement`, `Witness`)
 3. Guest deserializes and verifies using re-implemented Poseidon2 logic
 4. Guest reveals `(all_valid, count, commitment_hash)` as public outputs
 
 ## Cryptographic Details
 
-- **Signature scheme**: `SIGWinternitzLifetime18W1` (Poseidon-based, KoalaBear field)
-- **Tree height**: 18 levels
-- **Hash nodes**: 7×4 bytes (KoalaBear field elements)
-- **Parameters**: 5×4 bytes
-- **WOTS chains**: 163 (155 message + 8 checksum)
+- **Signature scheme**: `SIGTargetSumLifetime18W1NoOff` (TargetSum encoding, Poseidon-based, KoalaBear field)
+- **Tree height**: 18 levels (supports 2^18 = 262,144 signatures per key)
+- **Hash nodes**: 7×4 bytes (7 KoalaBear field elements)
+- **Parameters**: 5×4 bytes (5 KoalaBear field elements)
+- **Randomness**: 6×4 bytes (6 KoalaBear field elements, ρ)
+- **Chains**: 155 (TargetSum w=1, no checksum)
 
 ## Toolchain Requirements
 
@@ -102,6 +100,6 @@ OPENVM_GUEST_FEATURES=cuda cargo run --release --bin xmss-host
 ## Important Constraints
 
 - Guest is `#![no_std]` — no `std`-only dependencies
-- `hashsig` is host-only — guest receives pre-serialized data
+- `leanSig` is host-only — guest receives pre-serialized data
 - `Statement.m` must be a 32-byte SHA-256 digest (not raw message)
 - Epoch validation: signing requires epoch within `[activation_epoch, activation_epoch + num_active_epochs)`
