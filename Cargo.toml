@@ -4,7 +4,7 @@ exclude = ["guest"]
 resolver = "2"
 
 [workspace.dependencies]
-openvm = { git = "https://github.com/openvm-org/openvm.git", features = ["std"], default-features = false ,tag = "v1.4.1"}
+openvm = { git = "https://github.com/openvm-org/openvm.git", features = ["std"], default-features = false ,tag = "v1.4.2"}
 serde = { version = "1.0", features = ["derive"], default-features = false }
 hashsig = { git = "https://github.com/b-wagn/hash-sig.git" }
 bincode = { version = "1.3" }
