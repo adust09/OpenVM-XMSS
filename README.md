@@ -1,53 +1,115 @@
 # OpenVM-XMSS
 
-XMSS (eXtended Merkle Signature Scheme) verification tailored for Ethereum, with an OpenVM guest program that proves batch verification using the TSL encoding scheme and accelerated SHA‑256, and binds a public statement (k, ep, m, pk_i) via a commitment revealed as public output.
+XMSS (eXtended Merkle Signature Scheme) verification tailored for Ethereum, with an OpenVM guest program that proves batch verification using the leanSig TargetSum encoding scheme and accelerated SHA-256, and binds a public statement (k, ep, m, pk_i) via a commitment revealed as public output.
 
-## 1. Overview
+## 1. Purpose
 
-This repository focuses on verifiable XMSS verification inside OpenVM:
-- Verify multiple XMSS signatures in a guest program
-- Generate application-level proofs
-- Reveal pass/fail, count, and statement commitment as public values
- - Aggregate and verify large batches (10, 100, 1,000, up to 10,000)
+This project generates zero-knowledge proofs for XMSS signature batch verification inside OpenVM. Multiple XMSS signatures are verified within a zkVM guest program, producing succinct application-level proofs of correct verification. The primary use case is enabling Ethereum to verify post-quantum signatures.
 
+## 2. leanSig and std/no_std Relationship
 
-## 2. Prerequisites
+### Host Side (std)
 
-Install the OpenVM CLI and toolchain (see OpenVM book). This project now targets Rust 1.87 or newer, so make sure the stable toolchain is installed locally:
+The host-side crates run in a standard Rust environment with full `std` support:
 
-```bash
-rustup install 1.87.0
-cargo +1.87.0 install --locked --git https://github.com/openvm-org/openvm.git --tag v1.3.0 cargo-openvm
-rustup install nightly-2025-02-14
-rustup component add rust-src --toolchain nightly-2025-02-14
+| Crate | Role |
+|-------|------|
+| `xmss-host` | CLI orchestrator that generates inputs, runs OpenVM prove/verify |
+| `xmss-lib` | Links `leanSig` crate for XMSS key generation and signing |
+| `xmss-types` | Serialization types (used by both host and guest) |
+
+The host uses `leanSig` to:
+1. Generate XMSS key pairs
+2. Sign messages
+3. Export public keys and signatures into serialized formats
+
+### Guest Side (no_std)
+
+The guest program (`xmss-guest`) runs inside OpenVM in a `#![no_std]` environment. It does not link `leanSig`; all XMSS material arrives pre-serialized from the host. The guest re-implements Poseidon2 using `p3-koala-bear` for KoalaBear field operations and uses OpenVM-accelerated SHA-256 for statement commitment hashing. It contains pure verification logic with no key generation or signing capability. This separation ensures the guest remains lightweight and zkVM-compatible.
+
+### Key Type Flow
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      HOST (std)                              │
+│                                                              │
+│  leanSig::key_gen() → (PublicKey, SecretKey)                │
+│  leanSig::sign()    → Signature                              │
+│                ↓                                             │
+│  export_public_key() → ExportedPublicKey { root, parameter } │
+│  export_signature()  → ExportedSignature { randomness,       │
+│                         chain_hashes, auth_path }            │
+│                ↓                                             │
+│  Serialize to VerificationBatch (JSON)                       │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+                           ▼
+┌──────────────────────────────────────────────────────────────┐
+│                     GUEST (no_std)                            │
+│                                                               │
+│  Deserialize VerificationBatch                                │
+│                ↓                                              │
+│  verify_batch() using Poseidon2-KoalaBear                     │
+│  - Parse field elements from bytes                            │
+│  - Compute TargetSum codeword                                 │
+│  - Walk WOTS chains                                           │
+│  - Verify Merkle tree path                                    │
+│                ↓                                              │
+│  reveal_u32(all_valid, count, commitment[0..8])               │
+└───────────────────────────────────────────────────────────────┘
 ```
 
-## 3. Getting Started
+## 3. Cryptographic Parameters
+
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| Signature scheme | `SIGTargetSumLifetime18W1NoOff` | TargetSum encoding, Poseidon hash |
+| Tree height | 18 | Supports 2^18 = 262,144 signatures per key |
+| Number of chains | 155 | TargetSum w=1 (no checksum) |
+| Base | 2 | Binary digits |
+| Hash output | 7 × 4 bytes | 7 KoalaBear field elements |
+| Parameter size | 5 × 4 bytes | 5 KoalaBear field elements |
+| Randomness size | 6 × 4 bytes | 6 KoalaBear field elements (ρ) |
+
+## 4. Getting Started
 
 ### Quick Start
 
-```
+```bash
 cargo run --release --bin xmss-host
 ```
 
-This single command always executes the exact same pipeline (all parameters come from constants inside `host/src/commands/benchmark_openvm.rs`):
-1. Generate an input JSON with two signatures.
-2. Run `cargo openvm keygen` automatically when needed (first run only).
-3. Execute `cargo openvm prove app` and then `cargo openvm verify app`.
-4. Print per-phase timings and child-process peak RSS.
+This command executes the full pipeline:
+1. Generate an input JSON with 2 signatures
+2. Run `cargo openvm keygen` (first run only)
+3. Execute `cargo openvm prove app`
+4. Execute `cargo openvm verify app`
+5. Print per-phase timings and peak memory usage
 
-No additional CLI flags or subcommands exist. To benchmark different batch sizes or iteration counts, edit the corresponding constants (e.g. `SIGNATURES`) in the code. To enable optional OpenVM features such as CUDA, prefix the command with `OPENVM_GUEST_FEATURES=cuda`.
+### Build Commands
 
-#### Default build vs OpenVM run
+```bash
+# Build workspace (lib, host, xmss-types)
+cargo build --release
 
-- The guest crate defaults to `#![no_std]`, so OpenVM builds run without extra flags.
-- If you want to check the guest with a plain `cargo build`, invoke `cargo build --manifest-path guest/Cargo.toml --features std-entry` to link the stub `main()`.
-- The host CLI runs `cargo openvm keygen` automatically before prove/verify, so you never have to run it manually.
+# Format and lint
+cargo fmt --all
+cargo clippy --all-targets --all-features -- -D warnings
 
-## 3.5 Host ↔ Guest Boundary
+# Run tests
+cargo test                     # All workspace tests
+cargo test -p xmss-lib         # Library tests only
+cargo test -p xmss-types       # Types crate tests
+```
 
-- Host-side crates (`xmss-lib`, `xmss-host`, benches) are the only components that link the `hashsig` crate. They derive XMSS keys/signatures, hash arbitrary messages with SHA-256, and serialize the resulting witness into `xmss-types::VerificationBatch`.
-- The guest program is `#![no_std]` and depends solely on `xmss-types` for serde. It never links `hashsig`; all XMSS material arrives as serialized buffers prepared by the host.
-- Every signing flow must validate the requested epoch against the `(activation_epoch, num_active_epochs)` range supplied at key generation. Attempts outside that interval are rejected before calling into `hashsig`.
-- `Statement.m` always stores the 32-byte SHA-256 digest that was signed. This ensures the host and guest agree on the exact bytes that were proven, regardless of the original message length.
-- XMSS primitives are instantiated via `hashsig::signature::generalized_xmss::instantiations_poseidon::lifetime_2_to_the_18::winternitz::SIGWinternitzLifetime18W1`, so public keys/witness fragments use KoalaBear Poseidon field elements (e.g., 7×4-byte nodes, 5×4-byte parameters).
+### Guest-Specific Commands
+
+```bash
+# Build guest for plain cargo check (not OpenVM)
+cargo build --manifest-path guest/Cargo.toml --features std-entry
+
+# Manual OpenVM operations (usually auto-run by host)
+cd guest
+cargo openvm build --release   # Build guest ELF
+cargo openvm keygen            # Generate proving/verification keys
+```

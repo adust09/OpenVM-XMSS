@@ -5,11 +5,11 @@ use std::path::Path;
 use rand::SeedableRng;
 use xmss_lib::{
     hash_message_to_digest,
-    hashsig_export::{
-        export_public_key, export_signature, HashsigExportError, WINTERNITZ_TREE_HEIGHT,
-        WINTERNITZ_W1_NUM_CHAINS,
+    leansig_export::{
+        export_public_key, export_signature, LeansigExportError, TARGETSIM_TREE_HEIGHT,
+        TARGETSIM_W1_NUM_CHAINS,
     },
-    validate_epoch_range, SIGWinternitzLifetime18W1, SignatureScheme,
+    validate_epoch_range, DefaultSignatureScheme, SignatureScheme,
 };
 use xmss_types::{PublicKey, Signature, Statement, TslParams, VerificationBatch, Witness};
 
@@ -33,11 +33,11 @@ pub fn generate_batch_input(
     use_fake_keys: bool,
 ) -> Result<(), Box<dyn Error>> {
     let params = TslParams {
-        w: 2,
-        v: WINTERNITZ_W1_NUM_CHAINS as u16,
+        w: 2, // TargetSum base (w=1 encoding uses base 2)
+        v: TARGETSIM_W1_NUM_CHAINS as u16,
         d0: 0,
         security_bits: 128,
-        tree_height: WINTERNITZ_TREE_HEIGHT as u16,
+        tree_height: TARGETSIM_TREE_HEIGHT as u16,
     };
 
     let digest = hash_message_to_digest(b"bench");
@@ -52,10 +52,15 @@ pub fn generate_batch_input(
         let activation_epoch = epoch as usize;
         let num_active_epochs = 1usize;
         let (pk, sk) =
-            SIGWinternitzLifetime18W1::key_gen(&mut rng, activation_epoch, num_active_epochs);
+            DefaultSignatureScheme::key_gen(&mut rng, activation_epoch, num_active_epochs);
         validate_epoch_range(activation_epoch, num_active_epochs, epoch)?;
-        let sig = SIGWinternitzLifetime18W1::sign(&mut rng, &sk, epoch, &digest)
-            .map_err(|e| format!("hash-sig signing failed: {e}"))?;
+        let sig = DefaultSignatureScheme::sign(&sk, epoch, &digest)
+            .map_err(|e| format!("leanSig signing failed: {e}"))?;
+
+        if !DefaultSignatureScheme::verify(&pk, epoch, &digest, &sig) {
+            return Err("leanSig verification failed for generated sample".into());
+        }
+
 
         let exported_pk = export_public_key(&pk).map_err(export_err)?;
         let exported_sig = export_signature(&sig).map_err(export_err)?;
@@ -76,8 +81,8 @@ pub fn generate_batch_input(
             fake_merkle
                 .randomize(&digest, &mut public_key, &mut signature, &mut rng)
                 .map_err(|e| format!("failed to build fake merkle path: {e}"))?;
-        } else if !SIGWinternitzLifetime18W1::verify(&pk, epoch, &digest, &sig) {
-            return Err("hash-sig verification failed for generated sample".into());
+        } else if !DefaultSignatureScheme::verify(&pk, epoch, &digest, &sig) {
+            return Err("leanSig verification failed for generated sample".into());
         }
 
         public_keys.push(public_key);
@@ -118,7 +123,7 @@ pub fn generate_batch_input(
     Ok(())
 }
 
-fn export_err(err: HashsigExportError) -> Box<dyn Error> {
+fn export_err(err: LeansigExportError) -> Box<dyn Error> {
     Box::new(err)
 }
 
@@ -139,7 +144,7 @@ mod fake_keys {
     const NUM_CHUNKS_MESSAGE: usize = 155;
     const NUM_CHUNKS_CHECKSUM: usize = 8;
     const NUM_CHAINS: usize = NUM_CHUNKS_MESSAGE + NUM_CHUNKS_CHECKSUM;
-    const TREE_HEIGHT: usize = WINTERNITZ_TREE_HEIGHT as usize;
+    const TREE_HEIGHT: usize = TARGETSIM_TREE_HEIGHT as usize;
     const BASE: usize = 2;
     const FIELD_MODULUS: u32 = KoalaBear::ORDER_U64 as u32;
     const TWEAK_SEPARATOR_FOR_MESSAGE_HASH: u8 = 0x02;
