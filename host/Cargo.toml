@@ -11,6 +11,10 @@ xmss-lib = { path = "../lib" }
 xmss-types = { path = "../xmss-types" }
 libc = { version = "0.2", optional = false }
 rand = "0.9"
+clap = { version = "4.5", features = ["derive"] }
+p3-field = { workspace = true }
+p3-koala-bear = { workspace = true }
+p3-symmetric = { workspace = true }
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }

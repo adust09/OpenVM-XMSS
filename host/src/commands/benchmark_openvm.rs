@@ -9,16 +9,23 @@ use std::time::Instant;
 
 /// Run the default XMSS workflow: generate input, prove, and verify in sequence.
 /// Parameters such as signature count or iteration count are fixed to keep the CLI simple.
-pub fn run_default_workflow() -> CommandResult {
+pub fn run_default_workflow(use_fake_keys: bool) -> CommandResult {
     const SIGNATURES: usize = 2;
     let input = "guest/input.json";
 
     println!("=== Full Benchmark: Prove + Verify (2 signatures) ===\n");
 
     // Generate input
-    println!("Generating input with {} signatures...", SIGNATURES);
+    if use_fake_keys {
+        println!(
+            "Generating input with {} signatures (fake Merkle paths)...",
+            SIGNATURES
+        );
+    } else {
+        println!("Generating input with {} signatures...", SIGNATURES);
+    }
     let t0 = Instant::now();
-    generate_batch_input(SIGNATURES, input)?;
+    generate_batch_input(SIGNATURES, input, use_fake_keys)?;
     let input_gen_time = t0.elapsed();
     println!("Input generation time: {:?}\n", input_gen_time);
 
